@@ -1,0 +1,84 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+test-buildroot/
+.flatpak-builder/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/schemas
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+nul
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.classpath
+.settings/
+
+# Claude Code — development tooling & vendored third-party skills (not app source)
+.claude/
+
+# Vite / Cloudflare scaffold sub-project (not part of the app)
+landing/
+
+# Debug files
+debug-*.mjs
+
+# Build logs
+cargo-build.log
+
+# Tauri signing keys
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.jks
+
+# Coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Packaging Artifacts
+build-dir/
+repo/
+velo-*.tar.gz
+*.flatpak
+*.rpm
+*.src.rpm

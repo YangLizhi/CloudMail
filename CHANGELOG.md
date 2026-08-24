@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.1](https://github.com/avihaymenahem/velo/compare/velo-v0.4.21...velo-v0.5.1) (2026-08-24)
+## [0.5.1](https://github.com/YangLizhi/CloudMail/releases/tag/v0.5.1) (2026-08-24)
 
 ### Rebrand
 

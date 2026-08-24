@@ -13,8 +13,8 @@ Thank you for your interest in contributing to CloudMail! This guide will help y
 ### Setup
 
 ```bash
-git clone https://github.com/avihaymenahem/velo.git
-cd velo
+git clone https://github.com/YangLizhi/CloudMail.git
+cd CloudMail
 npm install
 npm run tauri dev
 ```
@@ -93,7 +93,7 @@ chore: bump tauri to v2.10
 
 ## Reporting Bugs
 
-Use the [bug report template](https://github.com/avihaymenahem/velo/issues/new?template=bug_report.yml) on GitHub Issues. Include:
+Use the [bug report template](https://github.com/YangLizhi/CloudMail/issues/new?template=bug_report.yml) on GitHub Issues. Include:
 
 - Steps to reproduce
 - Expected vs. actual behavior
@@ -102,7 +102,7 @@ Use the [bug report template](https://github.com/avihaymenahem/velo/issues/new?t
 
 ## Feature Requests
 
-Use the [feature request template](https://github.com/avihaymenahem/velo/issues/new?template=feature_request.yml) on GitHub Issues.
+Use the [feature request template](https://github.com/YangLizhi/CloudMail/issues/new?template=feature_request.yml) on GitHub Issues.
 
 ## License
 

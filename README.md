@@ -184,8 +184,8 @@ Google Calendar 同步，月/周/日视图，可直接创建事件。
 ### 从源码构建
 
 ```bash
-git clone https://github.com/avihaymenahem/velo.git
-cd velo
+git clone https://github.com/YangLizhi/CloudMail.git
+cd CloudMail
 npm install
 npm run tauri dev
 ```

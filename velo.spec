@@ -10,7 +10,7 @@ Release: %{app_release}%{?dist}
 Summary: Fast, beautiful desktop email client
 
 License: Apache-2.0
-URL:     https://github.com/avihaymenahem/velo
+URL:     https://github.com/YangLizhi/CloudMail
 Source0: %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 # Build Dependencies

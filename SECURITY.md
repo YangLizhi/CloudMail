@@ -13,7 +13,7 @@ We only provide security fixes for the latest release. Please keep CloudMail up 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to **security@velomail.app** (or by opening a [private security advisory](https://github.com/avihaymenahem/velo/security/advisories/new) on GitHub).
+Instead, please report them via email to **security@velomail.app** (or by opening a [private security advisory](https://github.com/YangLizhi/CloudMail/security/advisories/new) on GitHub).
 
 Include as much of the following as possible:
 

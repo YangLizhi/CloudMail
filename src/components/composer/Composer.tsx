@@ -140,6 +140,21 @@ export function Composer() {
     },
   });
 
+  // Seed the TipTap editor with the composer store's bodyHtml (e.g. the
+  // reply/forward quote) whenever it opens. The editor is created once while
+  // the composer stays mounted, so bodyHtml is intentionally not subscribed.
+  const normalizeEmpty = (s: string) => s.replace(/<p>\s*<\/p>\s*/g, "").trim();
+  useEffect(() => {
+    if (!isOpen || !editor) return;
+    const storeBody = useComposerStore.getState().bodyHtml || "";
+    const editorBody = editor.getHTML() || "";
+    // Only reseed when they diverge; emitUpdate=false avoids a save loop and
+    // the editor body is kept in sync via onUpdate while the user types.
+    if (normalizeEmpty(editorBody) !== normalizeEmpty(storeBody)) {
+      editor.commands.setContent(storeBody, { emitUpdate: false });
+    }
+  }, [isOpen, editor]);
+
   // Load signature, aliases, and templates in parallel when composer opens
   useEffect(() => {
     if (!isOpen || !activeAccountId) return;

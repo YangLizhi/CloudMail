@@ -389,7 +389,7 @@ export function ThreadView({ thread }: ThreadViewProps) {
         )}
 
         {/* Messages (scrollable) */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto relative">
           <ErrorBoundary name="MessageList">
             {messages.map((msg, i) => (
               <MessageItem

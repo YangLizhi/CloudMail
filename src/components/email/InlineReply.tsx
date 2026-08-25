@@ -65,7 +65,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     content: "",
     editorProps: {
       attributes: {
-        class: "prose prose-sm max-w-none px-3 py-2 min-h-[80px] max-h-[200px] overflow-y-auto focus:outline-none text-text-primary text-sm",
+        class: "prose prose-sm max-w-none px-4 py-3 min-h-full focus:outline-none text-text-primary text-sm",
       },
     },
   });
@@ -351,9 +351,12 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const modeLabel = mode === "reply" ? "Reply" : mode === "replyAll" ? "Reply All" : "Forward";
 
   return (
-    <div ref={containerRef} className="mx-4 my-3 border border-border-primary rounded-lg overflow-hidden bg-bg-primary">
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-10 bg-white flex flex-col overflow-hidden"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary border-b border-border-secondary">
+      <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary border-b border-border-secondary shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             {(["reply", "replyAll", "forward"] as const).map((m) => (
@@ -380,7 +383,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       </div>
 
       {/* Recipients + subject */}
-      <div className="px-3 py-2 border-b border-border-secondary space-y-1.5 bg-bg-primary">
+      <div className="px-3 py-2 border-b border-border-secondary space-y-1.5 bg-bg-primary shrink-0">
         <EmailField label="To" values={to} onChange={setTo} placeholder="recipient@example.com" />
         <EmailField label="Cc" values={cc} onChange={setCc} placeholder="cc@example.com" />
         <div className="flex items-center gap-2">
@@ -395,11 +398,13 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       </div>
 
       {/* Formatting toolbar */}
-      <EditorToolbar editor={editor} />
+      <div className="shrink-0">
+        <EditorToolbar editor={editor} />
+      </div>
 
       {/* Editor */}
-      <div className="relative">
-        <EditorContent editor={editor} />
+      <div className="relative flex-1 min-h-[200px] overflow-y-auto">
+        <EditorContent editor={editor} className="h-full" />
         {autoDraftLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/60 backdrop-blur-[1px]">
             <div className="flex items-center gap-2 text-xs text-text-secondary">
@@ -411,7 +416,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border-secondary bg-bg-secondary">
+      <div className="flex items-center justify-between px-3 py-2 border-t border-border-secondary bg-bg-secondary shrink-0">
         <div className="flex items-center gap-1">
           <button
             onClick={handleExpandToComposer}

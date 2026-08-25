@@ -30,6 +30,22 @@ export interface DbMessage {
   imap_folder: string | null;
 }
 
+/**
+ * Return the RFC `Message-ID` header of a single message (used to re-locate a
+ * message over IMAP when its stored UID is stale, via a UID SEARCH).
+ */
+export async function getMessageMessageIdHeader(
+  accountId: string,
+  messageId: string,
+): Promise<string | null> {
+  const db = await getDb();
+  const rows = await db.select<{ message_id_header: string | null }[]>(
+    "SELECT message_id_header FROM messages WHERE account_id = $1 AND id = $2",
+    [accountId, messageId],
+  );
+  return rows[0]?.message_id_header ?? null;
+}
+
 export async function getMessagesForThread(
   accountId: string,
   threadId: string,

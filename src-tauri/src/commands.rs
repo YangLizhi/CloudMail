@@ -208,9 +208,17 @@ pub async fn imap_fetch_attachment(
     folder: String,
     uid: u32,
     part_id: String,
+    message_id: Option<String>,
 ) -> Result<String, String> {
     let mut session = imap_client::connect(&config).await?;
-    let data = imap_client::fetch_attachment(&mut session, &folder, uid, &part_id).await?;
+    let data = imap_client::fetch_attachment(
+        &mut session,
+        &folder,
+        uid,
+        &part_id,
+        message_id.as_deref(),
+    )
+    .await?;
     let _ = session.logout().await;
     Ok(data)
 }

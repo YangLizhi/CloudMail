@@ -252,9 +252,16 @@ export async function imapFetchAttachment(
   config: ImapConfig,
   folder: string,
   uid: number,
-  partId: string
+  partId: string,
+  messageId?: string | null,
 ): Promise<string> {
-  return invoke<string>('imap_fetch_attachment', { config, folder, uid, partId });
+  return invoke<string>('imap_fetch_attachment', {
+    config,
+    folder,
+    uid,
+    partId,
+    messageId: messageId ?? null,
+  });
 }
 
 /**

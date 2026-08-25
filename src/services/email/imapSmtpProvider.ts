@@ -21,7 +21,7 @@ import {
 import { getAccount, type DbAccount } from "../db/accounts";
 import { findSpecialFolder } from "../imap/messageHelper";
 import { ensureFreshToken } from "../oauth/oauthTokenManager";
-import { upsertMessage } from "../db/messages";
+import { upsertMessage, getMessageMessageIdHeader } from "../db/messages";
 import { upsertThread, setThreadLabels, getThreadLabelIds } from "../db/threads";
 
 /**
@@ -248,7 +248,14 @@ export class ImapSmtpProvider implements EmailProvider {
     }
 
     const config = await this.getImapConfig();
-    const data = await imapFetchAttachment(config, folder, uid, attachmentId);
+    const header = await getMessageMessageIdHeader(this.accountId, messageId);
+    const data = await imapFetchAttachment(
+      config,
+      folder,
+      uid,
+      attachmentId,
+      header,
+    );
     return { data, size: data.length };
   }
 

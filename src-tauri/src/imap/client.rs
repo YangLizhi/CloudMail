@@ -627,26 +627,31 @@ pub async fn fetch_attachment(
     folder: &str,
     uid: u32,
     part_id: &str,
+    message_id: Option<&str>,
 ) -> Result<String, String> {
     tokio::time::timeout(IMAP_CMD_TIMEOUT, session.select(folder))
         .await
         .map_err(|_| format!("SELECT {folder} timed out after {}s — check your server settings or network connection", IMAP_CMD_TIMEOUT.as_secs()))?
         .map_err(|e| format!("SELECT {folder} failed: {e}"))?;
 
-    let uid_str = uid.to_string();
-    let fetches: Vec<_> = tokio::time::timeout(IMAP_FETCH_TIMEOUT, async {
-        let stream = session
-            .uid_fetch(&uid_str, "(RFC822)")
+    let mut fetches = fetch_raw_by_uid(session, &uid.to_string()).await?;
+
+    // The stored UID may be stale (e.g. UIDVALIDITY changed or the message was
+    // moved). Locate it by its RFC Message-ID and re-fetch with the current UID.
+    if fetches.is_empty() {
+        if let Some(msg_id) = message_id {
+            let found = tokio::time::timeout(IMAP_SEARCH_TIMEOUT, session.uid_search(
+                &format!("HEADER Message-ID \"{msg_id}\""),
+            ))
             .await
-            .map_err(|e| format!("UID FETCH attachment failed: {e}"))?;
-        Ok::<_, String>(stream.collect::<Vec<_>>().await)
-    })
-    .await
-    .map_err(|_| format!("UID FETCH attachment timed out after {}s — check your server settings or network connection", IMAP_FETCH_TIMEOUT.as_secs()))?
-    ?
-    .into_iter()
-    .filter_map(|r| r.ok())
-    .collect();
+            .map_err(|_| format!("UID SEARCH Message-ID timed out after {}s", IMAP_SEARCH_TIMEOUT.as_secs()))?
+            .map_err(|e| format!("UID SEARCH Message-ID failed: {e}"))?;
+
+            if let Some(current_uid) = found.iter().next() {
+                fetches = fetch_raw_by_uid(session, &current_uid.to_string()).await?;
+            }
+        }
+    }
 
     let fetch = fetches
         .first()
@@ -692,6 +697,29 @@ pub async fn fetch_attachment(
     };
 
     Ok(base64::engine::general_purpose::STANDARD.encode(&data))
+}
+
+/// Fetch a full RFC822 message body by UID. Uses `UID FLAGS RFC822` (the same
+/// spec proven to work during sync) so IMAP servers that ignore a bare `RFC822`
+/// or async-imap's UID association still return the message.
+async fn fetch_raw_by_uid(
+    session: &mut ImapSession,
+    uid: &str,
+) -> Result<Vec<async_imap::types::Fetch>, String> {
+    let fetches: Vec<_> = tokio::time::timeout(IMAP_FETCH_TIMEOUT, async {
+        let stream = session
+            .uid_fetch(uid, "(UID FLAGS RFC822)")
+            .await
+            .map_err(|e| format!("UID FETCH attachment failed: {e}"))?;
+        Ok::<_, String>(stream.collect::<Vec<_>>().await)
+    })
+    .await
+    .map_err(|_| format!("UID FETCH attachment timed out after {}s — check your server settings or network connection", IMAP_FETCH_TIMEOUT.as_secs()))?
+    ?
+    .into_iter()
+    .filter_map(|r| r.ok())
+    .collect();
+    Ok(fetches)
 }
 
 /// Fetch the raw RFC822 source of a single message by UID.

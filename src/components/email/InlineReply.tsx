@@ -1,9 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
 import { EditorToolbar } from "@/components/composer/EditorToolbar";
+import { buildRichTextExtensions } from "@/components/composer/richText";
 import { Reply, ReplyAll, Forward, Send, Maximize2, RotateCcw, X, Loader2 } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useComposerStore } from "@/stores/composerStore";
@@ -42,6 +40,9 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const [to, setTo] = useState<string[]>([]);
   const [cc, setCc] = useState<string[]>([]);
   const [subject, setSubject] = useState("");
+  const [attachments, setAttachments] = useState<
+    { filename: string; mimeType: string; content: string }[]
+  >([]);
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccount = accounts.find((a) => a.id === accountId);
   const openComposer = useComposerStore((s) => s.openComposer);
@@ -52,16 +53,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const lastMessage = messages[messages.length - 1];
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false },
-      }),
-      Placeholder.configure({
-        placeholder: "Write your reply...",
-      }),
-      Image.configure({ inline: true, allowBase64: true }),
-    ],
+    extensions: buildRichTextExtensions("Write your reply..."),
     content: "",
     editorProps: {
       attributes: {
@@ -96,6 +88,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const activateMode = useCallback((newMode: ReplyMode) => {
     if (!editor || !lastMessage) return;
     setMode(newMode);
+    setAttachments([]);
     setHasAutoDraft(false);
     autoDraftAbortRef.current = true; // Cancel any in-flight draft
     if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
@@ -188,6 +181,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
         htmlBody: html,
         inReplyTo: lastMessage?.id,
         threadId: thread.id,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
 
       // Get undo send delay
@@ -221,6 +215,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
 
       // Reset state
       editor.commands.setContent("");
+      setAttachments([]);
       setMode(null);
       onSent();
     } catch (err) {
@@ -228,7 +223,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     } finally {
       setSending(false);
     }
-  }, [activeAccount, editor, sending, to, cc, subject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent]);
+  }, [activeAccount, editor, sending, to, cc, subject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent, attachments]);
 
   const handleExpandToComposer = useCallback(() => {
     if (!editor || !lastMessage) return;
@@ -272,6 +267,23 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     editor.commands.focus();
   }, [editor]);
 
+  const handleInsertAttachment = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1] ?? "";
+      setAttachments((prev) => [
+        ...prev,
+        {
+          filename: file.name,
+          mimeType: file.type || "application/octet-stream",
+          content: base64,
+        },
+      ]);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
   // Abort auto-draft on user typing
   useEffect(() => {
     if (!editor) return;
@@ -303,6 +315,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       if (e.key === "Escape") {
         e.preventDefault();
         editor?.commands.setContent("");
+        setAttachments([]);
         setMode(null);
         setHasAutoDraft(false);
         autoDraftAbortRef.current = true;
@@ -375,7 +388,10 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
           </div>
         </div>
         <button
-          onClick={() => setMode(null)}
+          onClick={() => {
+            setMode(null);
+            setAttachments([]);
+          }}
           className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
         >
           Cancel
@@ -399,7 +415,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
 
       {/* Formatting toolbar */}
       <div className="shrink-0">
-        <EditorToolbar editor={editor} />
+        <EditorToolbar editor={editor} onInsertAttachment={handleInsertAttachment} />
       </div>
 
       {/* Editor */}

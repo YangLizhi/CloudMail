@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CSSTransition } from "react-transition-group";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
 import { Clock, Maximize2, Minimize2, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { AddressInput } from "./AddressInput";
 import { EditorToolbar } from "./EditorToolbar";
+import { buildRichTextExtensions } from "./richText";
 import { AiAssistPanel } from "./AiAssistPanel";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { ScheduleSendDialog } from "./ScheduleSendDialog";
@@ -71,19 +69,7 @@ export function Composer() {
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false },
-      }),
-      Placeholder.configure({
-        placeholder: "Write your message...",
-      }),
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-      }),
-    ],
+    extensions: buildRichTextExtensions("Write your message..."),
     content: useComposerStore.getState().bodyHtml,
     onUpdate: ({ editor: ed }) => {
       useComposerStore.getState().setBodyHtml(ed.getHTML());

@@ -5,7 +5,6 @@ import { getMessagesForThread, type DbMessage } from "@/services/db/messages";
 import { useAccountStore } from "@/stores/accountStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useThreadStore, type Thread } from "@/stores/threadStore";
-import { useComposerStore } from "@/stores/composerStore";
 import { useContextMenuStore } from "@/stores/contextMenuStore";
 import { markThreadRead } from "@/services/emailActions";
 import { getSetting } from "@/services/db/settings";
@@ -128,58 +127,21 @@ export function ThreadView({ thread }: ThreadViewProps) {
     markRead();
   }, [activeAccountId, thread.id, thread.isRead, updateThread, markAsReadBehavior]);
 
-  const openComposer = useComposerStore((s) => s.openComposer);
   const openMenu = useContextMenuStore((s) => s.openMenu);
   const defaultReplyMode = useUIStore((s) => s.defaultReplyMode);
   const lastMessage = messages[messages.length - 1];
 
   const handleReply = useCallback(() => {
-    if (!lastMessage) return;
-    const replyTo = lastMessage.reply_to ?? lastMessage.from_address;
-    openComposer({
-      mode: "reply",
-      to: replyTo ? [replyTo] : [],
-      subject: `Re: ${lastMessage.subject ?? ""}`,
-      bodyHtml: buildQuote(lastMessage),
-      threadId: lastMessage.thread_id,
-      inReplyToMessageId: lastMessage.id,
-    });
-  }, [lastMessage, openComposer]);
+    window.dispatchEvent(new CustomEvent("velo-inline-reply", { detail: { mode: "reply" } }));
+  }, []);
 
   const handleReplyAll = useCallback(() => {
-    if (!lastMessage) return;
-    const replyTo = lastMessage.reply_to ?? lastMessage.from_address;
-    const allRecipients = new Set<string>();
-    if (replyTo) allRecipients.add(replyTo);
-    if (lastMessage.to_addresses) {
-      lastMessage.to_addresses.split(",").forEach((a) => allRecipients.add(a.trim()));
-    }
-    const ccList: string[] = [];
-    if (lastMessage.cc_addresses) {
-      lastMessage.cc_addresses.split(",").forEach((a) => ccList.push(a.trim()));
-    }
-    openComposer({
-      mode: "replyAll",
-      to: Array.from(allRecipients),
-      cc: ccList,
-      subject: `Re: ${lastMessage.subject ?? ""}`,
-      bodyHtml: buildQuote(lastMessage),
-      threadId: lastMessage.thread_id,
-      inReplyToMessageId: lastMessage.id,
-    });
-  }, [lastMessage, openComposer]);
+    window.dispatchEvent(new CustomEvent("velo-inline-reply", { detail: { mode: "replyAll" } }));
+  }, []);
 
   const handleForward = useCallback(() => {
-    if (!lastMessage) return;
-    openComposer({
-      mode: "forward",
-      to: [],
-      subject: `Fwd: ${lastMessage.subject ?? ""}`,
-      bodyHtml: buildForwardQuote(lastMessage),
-      threadId: lastMessage.thread_id,
-      inReplyToMessageId: lastMessage.id,
-    });
-  }, [lastMessage, openComposer]);
+    window.dispatchEvent(new CustomEvent("velo-inline-reply", { detail: { mode: "forward" } }));
+  }, []);
 
   const handlePrint = useCallback(() => {
     if (messages.length === 0) return;
@@ -531,19 +493,4 @@ export function ThreadView({ thread }: ThreadViewProps) {
       )}
     </div>
   );
-}
-
-function buildQuote(msg: DbMessage): string {
-  const date = new Date(msg.date).toLocaleString();
-  const from = msg.from_name
-    ? `${escapeHtml(msg.from_name)} &lt;${escapeHtml(msg.from_address ?? "")}&gt;`
-    : escapeHtml(msg.from_address ?? "Unknown");
-  const body = msg.body_html ? sanitizeHtml(msg.body_html) : escapeHtml(msg.body_text ?? "");
-  return `<br><br><div style="border-left:2px solid #ccc;padding-left:12px;margin-left:0;color:#666">On ${date}, ${from} wrote:<br>${body}</div>`;
-}
-
-function buildForwardQuote(msg: DbMessage): string {
-  const date = new Date(msg.date).toLocaleString();
-  const body = msg.body_html ? sanitizeHtml(msg.body_html) : escapeHtml(msg.body_text ?? "");
-  return `<br><br>---------- Forwarded message ---------<br>From: ${escapeHtml(msg.from_name ?? "")} &lt;${escapeHtml(msg.from_address ?? "")}&gt;<br>Date: ${date}<br>Subject: ${escapeHtml(msg.subject ?? "")}<br>To: ${escapeHtml(msg.to_addresses ?? "")}<br><br>${body}`;
 }

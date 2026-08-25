@@ -11,6 +11,7 @@ import { buildRawEmail } from "@/utils/emailBuilder";
 import { upsertContact } from "@/services/db/contacts";
 import { getSetting } from "@/services/db/settings";
 import { getDefaultSignature } from "@/services/db/signatures";
+import { buildReplyQuote, buildForwardQuote } from "@/utils/emailQuote";
 import {
   isAutoDraftEnabled,
   generateAutoDraft,
@@ -36,6 +37,9 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const [signatureHtml, setSignatureHtml] = useState("");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const [hasAutoDraft, setHasAutoDraft] = useState(false);
+  const [to, setTo] = useState<string[]>([]);
+  const [cc, setCc] = useState<string[]>([]);
+  const [subject, setSubject] = useState("");
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccount = accounts.find((a) => a.id === accountId);
   const openComposer = useComposerStore((s) => s.openComposer);
@@ -84,17 +88,54 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   }, [editor, thread.id, accountId, messages]);
 
   const activateMode = useCallback((newMode: ReplyMode) => {
+    if (!editor || !lastMessage) return;
     setMode(newMode);
     setHasAutoDraft(false);
     autoDraftAbortRef.current = true; // Cancel any in-flight draft
     if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
-    focusTimerRef.current = setTimeout(() => editor?.commands.focus(), 50);
+
+    // Outlook-style recipient + subject prefill.
+    const replyTo = lastMessage.reply_to ?? lastMessage.from_address;
+    if (newMode === "reply") {
+      setTo(replyTo ? [replyTo] : []);
+      setCc([]);
+      setSubject(composeSubject("Re", lastMessage.subject ?? ""));
+    } else if (newMode === "replyAll") {
+      const allTo = new Set<string>();
+      if (replyTo) allTo.add(replyTo);
+      if (lastMessage.to_addresses) {
+        lastMessage.to_addresses.split(",").forEach((a) => allTo.add(a.trim()));
+      }
+      if (activeAccount?.email) allTo.delete(activeAccount.email);
+      const ccList: string[] = [];
+      if (lastMessage.cc_addresses) {
+        lastMessage.cc_addresses.split(",").forEach((a) => {
+          const tr = a.trim();
+          if (tr && tr !== activeAccount?.email) ccList.push(tr);
+        });
+      }
+      setTo(Array.from(allTo));
+      setCc(ccList);
+      setSubject(composeSubject("Re", lastMessage.subject ?? ""));
+    } else {
+      setTo([]);
+      setCc([]);
+      setSubject(composeSubject("Fwd", lastMessage.subject ?? ""));
+    }
+
+    // Seed the quoted original so the recipient always sees it (Outlook-style).
+    const quote = newMode === "forward"
+      ? buildForwardQuote(lastMessage)
+      : buildReplyQuote(lastMessage);
+    editor.commands.setContent(quote, { emitUpdate: false });
+    editor.commands.setTextSelection(0);
+    editor.commands.focus();
 
     // Trigger auto-draft for reply/replyAll (not forward)
     if (newMode === "reply" || newMode === "replyAll") {
       loadAutoDraft(newMode);
     }
-  }, [editor, loadAutoDraft]);
+  }, [editor, lastMessage, activeAccount?.email, loadAutoDraft]);
 
   // Load default signature
   useEffect(() => {
@@ -122,47 +163,9 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     }
   }, [mode]);
 
-  const getRecipients = useCallback((): { to: string[]; cc: string[] } => {
-    if (!lastMessage) return { to: [], cc: [] };
-
-    if (mode === "forward") return { to: [], cc: [] };
-
-    const replyTo = lastMessage.reply_to ?? lastMessage.from_address;
-
-    if (mode === "reply") {
-      return { to: replyTo ? [replyTo] : [], cc: [] };
-    }
-
-    // replyAll
-    const allTo = new Set<string>();
-    if (replyTo) allTo.add(replyTo);
-    if (lastMessage.to_addresses) {
-      lastMessage.to_addresses.split(",").forEach((a) => allTo.add(a.trim()));
-    }
-    // Remove self from recipients
-    if (activeAccount?.email) allTo.delete(activeAccount.email);
-
-    const ccList: string[] = [];
-    if (lastMessage.cc_addresses) {
-      lastMessage.cc_addresses.split(",").forEach((a) => {
-        const trimmed = a.trim();
-        if (trimmed && trimmed !== activeAccount?.email) ccList.push(trimmed);
-      });
-    }
-
-    return { to: Array.from(allTo), cc: ccList };
-  }, [lastMessage, mode, activeAccount?.email]);
-
-  const getSubject = useCallback((): string => {
-    const sub = lastMessage?.subject ?? "";
-    if (mode === "forward") return sub.startsWith("Fwd:") ? sub : `Fwd: ${sub}`;
-    return sub.startsWith("Re:") ? sub : `Re: ${sub}`;
-  }, [lastMessage, mode]);
-
   const handleSend = useCallback(async () => {
     if (!activeAccount || !editor || sending) return;
-    const { to, cc } = getRecipients();
-    if (to.length === 0 && mode !== "forward") return;
+    if (to.length === 0) return;
 
     setSending(true);
     try {
@@ -175,7 +178,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
         from: activeAccount.email,
         to,
         cc: cc.length > 0 ? cc : undefined,
-        subject: getSubject(),
+        subject,
         htmlBody: html,
         inReplyTo: lastMessage?.id,
         threadId: thread.id,
@@ -219,18 +222,17 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     } finally {
       setSending(false);
     }
-  }, [activeAccount, editor, sending, getRecipients, getSubject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent]);
+  }, [activeAccount, editor, sending, to, cc, subject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent]);
 
   const handleExpandToComposer = useCallback(() => {
     if (!editor || !lastMessage) return;
-    const { to, cc } = getRecipients();
     const bodyHtml = editor.getHTML();
 
     openComposer({
       mode: mode === "forward" ? "forward" : mode === "replyAll" ? "replyAll" : "reply",
       to,
       cc,
-      subject: getSubject(),
+      subject,
       bodyHtml,
       threadId: thread.id,
       inReplyToMessageId: lastMessage.id,
@@ -239,7 +241,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     // Reset inline state
     editor.commands.setContent("");
     setMode(null);
-  }, [editor, lastMessage, getRecipients, getSubject, mode, thread.id, openComposer]);
+  }, [editor, lastMessage, to, cc, subject, mode, thread.id, openComposer]);
 
   const handleRegenerateDraft = useCallback(async () => {
     if (!editor || !mode || mode === "forward") return;
@@ -340,7 +342,6 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   }
 
   // Expanded state — editor visible
-  const { to } = getRecipients();
   const modeLabel = mode === "reply" ? "Reply" : mode === "replyAll" ? "Reply All" : "Forward";
 
   return (
@@ -363,11 +364,6 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
               </button>
             ))}
           </div>
-          {to.length > 0 && (
-            <span className="text-[0.6875rem] text-text-tertiary truncate max-w-[200px]">
-              to {to.join(", ")}
-            </span>
-          )}
         </div>
         <button
           onClick={() => setMode(null)}
@@ -375,6 +371,21 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
         >
           Cancel
         </button>
+      </div>
+
+      {/* Recipients + subject */}
+      <div className="px-3 py-2 border-b border-border-secondary space-y-1.5 bg-bg-primary">
+        <EmailField label="To" values={to} onChange={setTo} placeholder="recipient@example.com" />
+        <EmailField label="Cc" values={cc} onChange={setCc} placeholder="cc@example.com" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-tertiary w-8 shrink-0">Subj</span>
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="flex-1 bg-transparent text-sm text-text-primary outline-none"
+            placeholder="Subject"
+          />
+        </div>
       </div>
 
       {/* Editor */}
@@ -425,13 +436,65 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
         </div>
         <button
           onClick={handleSend}
-          disabled={sending || (to.length === 0 && mode !== "forward")}
+          disabled={sending || to.length === 0}
           className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-hover rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send size={12} />
           {modeLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Prefix a subject with Re:/Fwd: unless it already has one. */
+function composeSubject(prefix: "Re" | "Fwd", sub: string): string {
+  return sub.startsWith(`${prefix}:`) ? sub : `${prefix}: ${sub}`;
+}
+
+/** Editable comma-separated email field (parsed on blur / Enter). */
+function EmailField({
+  label,
+  values,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(values.join(", "));
+
+  // Keep the input in sync when the mode prefill changes (e.g. new reply).
+  useEffect(() => {
+    setText(values.join(", "));
+  }, [values]);
+
+  const commit = () => {
+    const parsed = text
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    onChange(parsed);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-text-tertiary w-8 shrink-0">{label}</span>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        className="flex-1 bg-transparent text-sm text-text-primary outline-none"
+        placeholder={placeholder}
+      />
     </div>
   );
 }

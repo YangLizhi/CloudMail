@@ -2,7 +2,7 @@ import { memo, useState, useRef, useEffect, useMemo, forwardRef } from "react";
 import { formatFullDate } from "@/utils/date";
 import { EmailRenderer } from "./EmailRenderer";
 import { InlineAttachmentPreview } from "./InlineAttachmentPreview";
-import { AttachmentList, getAttachmentsForMessage } from "./AttachmentList";
+import { AttachmentList, AttachmentPreview, getAttachmentsForMessage } from "./AttachmentList";
 import type { DbMessage } from "@/services/db/messages";
 import type { DbAttachment } from "@/services/db/attachments";
 import { MailMinus } from "lucide-react";
@@ -24,6 +24,7 @@ interface MessageItemProps {
 export const MessageItem = memo(forwardRef<HTMLDivElement, MessageItemProps>(function MessageItem({ message, isLast, blockImages, senderAllowlisted, accountId, threadId, isSpam, focused, onContextMenu }, ref) {
   const [expanded, setExpanded] = useState(isLast);
   const [attachments, setAttachments] = useState<DbAttachment[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<DbAttachment | null>(null);
   const [authBannerDismissed, setAuthBannerDismissed] = useState(false);
   const attachmentsLoadedRef = useRef(false);
 
@@ -154,7 +155,7 @@ export const MessageItem = memo(forwardRef<HTMLDivElement, MessageItemProps>(fun
             messageId={message.id}
             attachments={attachments}
             referencedCids={referencedCids}
-            onAttachmentClick={() => {}}
+            onAttachmentClick={(att) => setPreviewAttachment(att)}
           />
 
           <AttachmentList
@@ -164,6 +165,15 @@ export const MessageItem = memo(forwardRef<HTMLDivElement, MessageItemProps>(fun
             referencedCids={referencedCids}
           />
         </div>
+      )}
+
+      {previewAttachment && (
+        <AttachmentPreview
+          attachment={previewAttachment}
+          accountId={message.account_id}
+          messageId={message.id}
+          onClose={() => setPreviewAttachment(null)}
+        />
       )}
     </div>
   );
@@ -237,4 +247,3 @@ function UnsubscribeLink({
     </button>
   );
 }
-

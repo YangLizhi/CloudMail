@@ -27,6 +27,13 @@
     "core:event:allow-emit",
     "opener:default",
     "opener:allow-open-url",
+    "opener:allow-open-path",
+    {
+      "identifier": "opener:scope",
+      "allow": [
+        { "path": "$APPDATA/**" }
+      ]
+    },
     "dialog:default",
     "dialog:allow-save",
     "fs:default",

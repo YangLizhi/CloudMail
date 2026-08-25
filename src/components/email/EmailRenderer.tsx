@@ -18,6 +18,15 @@ interface EmailRendererProps {
   inlineAttachments?: DbAttachment[];
 }
 
+/**
+ * Normalize a Content-ID so that the CID referenced in the HTML and the
+ * Content-ID stored on the attachment can be matched reliably regardless of
+ * surrounding angle brackets (e.g. `cid:<image001@x>` vs `cid:image001@x`).
+ */
+function normalizeCid(value: string): string {
+  return value.trim().replace(/^<+|>+$/g, "");
+}
+
 export function EmailRenderer({
   html,
   text,
@@ -65,7 +74,10 @@ export function EmailRenderer({
                 att.gmail_attachment_id!,
               );
               const base64 = response.data.replace(/-/g, "+").replace(/_/g, "/");
-              resolved.set(att.content_id!, `data:${att.mime_type ?? "image/png"};base64,${base64}`);
+              resolved.set(
+                normalizeCid(att.content_id!),
+                `data:${att.mime_type ?? "image/png"};base64,${base64}`,
+              );
             } catch {
               // Skip individual failures
             }
@@ -103,7 +115,7 @@ export function EmailRenderer({
     if (cidMap.size > 0) {
       body = body.replace(
         /\bcid:([^"'\s)]+)/gi,
-        (match, cidRef: string) => cidMap.get(cidRef) ?? match,
+        (match, cidRef: string) => cidMap.get(normalizeCid(cidRef)) ?? match,
       );
     }
 
@@ -245,4 +257,3 @@ export function EmailRenderer({
     </div>
   );
 }
-

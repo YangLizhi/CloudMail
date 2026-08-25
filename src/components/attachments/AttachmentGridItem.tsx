@@ -7,6 +7,7 @@ interface AttachmentGridItemProps {
   onPreview: () => void;
   onDownload: () => void;
   onJumpToEmail: () => void;
+  onOpenExternal: () => void;
 }
 
 function formatRelativeDate(timestamp: number | null): string {
@@ -23,12 +24,16 @@ function formatRelativeDate(timestamp: number | null): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
-export function AttachmentGridItem({ attachment, onPreview, onDownload, onJumpToEmail }: AttachmentGridItemProps) {
+export function AttachmentGridItem({ attachment, onPreview, onDownload, onJumpToEmail, onOpenExternal }: AttachmentGridItemProps) {
   const previewable = canPreview(attachment.mime_type, attachment.filename);
   const senderName = attachment.from_name || attachment.from_address || "Unknown";
 
   return (
-    <div className="group relative flex flex-col border border-border-primary rounded-lg hover:border-border-secondary hover:bg-bg-hover transition-colors overflow-hidden">
+    <div
+      className="group relative flex flex-col border border-border-primary rounded-lg hover:border-border-secondary hover:bg-bg-hover transition-colors overflow-hidden"
+      onDoubleClick={onOpenExternal}
+      title="Double-click to open with the default application"
+    >
       {/* Icon area */}
       <button
         onClick={previewable ? onPreview : onDownload}
@@ -68,6 +73,13 @@ export function AttachmentGridItem({ attachment, onPreview, onDownload, onJumpTo
           title="Download"
         >
           <Download size={13} />
+        </button>
+        <button
+          onClick={onOpenExternal}
+          className="p-1.5 rounded-md bg-bg-primary/90 border border-border-primary text-text-secondary hover:text-text-primary transition-colors"
+          title="Open with default application"
+        >
+          <ExternalLink size={13} />
         </button>
         <button
           onClick={onJumpToEmail}

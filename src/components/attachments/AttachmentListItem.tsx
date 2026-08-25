@@ -7,6 +7,7 @@ interface AttachmentListItemProps {
   onPreview: () => void;
   onDownload: () => void;
   onJumpToEmail: () => void;
+  onOpenExternal: () => void;
 }
 
 function formatShortDate(timestamp: number | null): string {
@@ -18,12 +19,16 @@ function formatShortDate(timestamp: number | null): string {
   });
 }
 
-export function AttachmentListItem({ attachment, onPreview, onDownload, onJumpToEmail }: AttachmentListItemProps) {
+export function AttachmentListItem({ attachment, onPreview, onDownload, onJumpToEmail, onOpenExternal }: AttachmentListItemProps) {
   const previewable = canPreview(attachment.mime_type, attachment.filename);
   const senderName = attachment.from_name || attachment.from_address || "Unknown";
 
   return (
-    <div className="group flex items-center gap-3 px-3 py-2 hover:bg-bg-hover rounded-md transition-colors">
+    <div
+      className="group flex items-center gap-3 px-3 py-2 hover:bg-bg-hover rounded-md transition-colors"
+      onDoubleClick={onOpenExternal}
+      title="Double-click to open with the default application"
+    >
       {/* Icon */}
       <span className="text-lg shrink-0 w-7 text-center">{getFileIcon(attachment.mime_type)}</span>
 
@@ -64,6 +69,13 @@ export function AttachmentListItem({ attachment, onPreview, onDownload, onJumpTo
           title="Download"
         >
           <Download size={14} />
+        </button>
+        <button
+          onClick={onOpenExternal}
+          className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors"
+          title="Open with default application"
+        >
+          <ExternalLink size={14} />
         </button>
         <button
           onClick={onJumpToEmail}

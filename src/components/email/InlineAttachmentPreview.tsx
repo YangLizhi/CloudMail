@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { DbAttachment } from "@/services/db/attachments";
-import { getEmailProvider } from "@/services/email/providerFactory";
+import { fetchAttachmentBlob } from "@/services/attachments/attachmentData";
 import { FileText } from "lucide-react";
 import { formatFileSize, isImage, isPdf } from "@/utils/fileTypeHelpers";
 
@@ -110,20 +110,12 @@ function ImageThumbnail({
     setLoading(true);
 
     try {
-      const provider = await getEmailProvider(accountId);
-      const response = await provider.fetchAttachment(messageId, attachment.gmail_attachment_id);
-
-      // Normalize URL-safe base64 (Gmail API) to standard base64
-      const base64 = response.data.replace(/-/g, "+").replace(/_/g, "/");
-      const binaryStr = atob(base64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-
-      const blob = new Blob([bytes.buffer as ArrayBuffer], {
-        type: attachment.mime_type ?? "image/jpeg",
-      });
+      const blob = await fetchAttachmentBlob(
+        accountId,
+        messageId,
+        attachment,
+        attachment.mime_type ?? "image/jpeg",
+      );
       setThumbnailUrl(URL.createObjectURL(blob));
     } catch (err) {
       console.error("Failed to load thumbnail:", err);
@@ -186,4 +178,3 @@ function ImageThumbnail({
     </div>
   );
 }
-

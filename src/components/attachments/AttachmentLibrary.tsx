@@ -10,6 +10,7 @@ import {
   type AttachmentSender,
 } from "@/services/db/attachments";
 import { getEmailProvider } from "@/services/email/providerFactory";
+import { openAttachmentWithDefaultApp } from "@/services/attachments/openAttachment";
 import { AttachmentPreview } from "@/components/email/AttachmentList";
 import { AttachmentGridItem } from "./AttachmentGridItem";
 import { AttachmentListItem } from "./AttachmentListItem";
@@ -183,6 +184,15 @@ export function AttachmentLibrary() {
     }
   }, []);
 
+  const handleOpenExternal = useCallback(async (att: AttachmentWithContext) => {
+    if (!accountId || !att.gmail_attachment_id) return;
+    try {
+      await openAttachmentWithDefaultApp(accountId, att.message_id, att);
+    } catch (err) {
+      console.error("Failed to open attachment with default app:", err);
+    }
+  }, [accountId]);
+
   // Track search input ref to avoid autofocus stealing
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -297,6 +307,7 @@ export function AttachmentLibrary() {
                 onPreview={() => setPreviewAttachment(att)}
                 onDownload={() => handleDownload(att)}
                 onJumpToEmail={() => handleJumpToEmail(att)}
+                onOpenExternal={() => handleOpenExternal(att)}
               />
             ))}
           </div>
@@ -309,6 +320,7 @@ export function AttachmentLibrary() {
                 onPreview={() => setPreviewAttachment(att)}
                 onDownload={() => handleDownload(att)}
                 onJumpToEmail={() => handleJumpToEmail(att)}
+                onOpenExternal={() => handleOpenExternal(att)}
               />
             ))}
           </div>

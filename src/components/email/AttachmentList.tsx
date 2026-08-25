@@ -1,11 +1,12 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { getAttachmentsForMessage, type DbAttachment } from "@/services/db/attachments";
-import { getEmailProvider } from "@/services/email/providerFactory";
 import { Modal } from "@/components/ui/Modal";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, ExternalLink } from "lucide-react";
 import { formatFileSize, isImage, isPdf, isText, canPreview, getFileIcon } from "@/utils/fileTypeHelpers";
+import { fetchAttachmentBlob, fetchAttachmentBytes } from "@/services/attachments/attachmentData";
+import { openAttachmentWithDefaultApp } from "@/services/attachments/openAttachment";
 
 /** Dedup attachments by filename+size (content-based) */
 function dedup(attachments: DbAttachment[]): DbAttachment[] {
@@ -27,6 +28,7 @@ interface AttachmentListProps {
 
 export function AttachmentList({ accountId, messageId, attachments, referencedCids }: AttachmentListProps) {
   const [preview, setPreview] = useState<DbAttachment | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   // Filter out CID images rendered in the email body and true inline parts, then dedup
   const fileAttachments = dedup(attachments.filter((a) => {
@@ -36,6 +38,28 @@ export function AttachmentList({ accountId, messageId, attachments, referencedCi
     if (a.is_inline && !a.filename) return false;
     return true;
   }));
+
+  const openExternal = useCallback(async (att: DbAttachment) => {
+    if (openingId) return;
+    setOpeningId(att.id);
+    try {
+      await openAttachmentWithDefaultApp(accountId, messageId, att);
+    } catch (err) {
+      console.error("Failed to open attachment with default app:", err);
+    } finally {
+      setOpeningId(null);
+    }
+  }, [accountId, messageId, openingId]);
+
+  const handleRowClick = useCallback((att: DbAttachment) => {
+    // Previewable types open the in-app preview; everything else goes straight
+    // to the OS default application.
+    if (canPreview(att.mime_type, att.filename)) {
+      setPreview(att);
+    } else {
+      openExternal(att);
+    }
+  }, [openExternal]);
 
   if (fileAttachments.length === 0) return null;
 
@@ -49,8 +73,10 @@ export function AttachmentList({ accountId, messageId, attachments, referencedCi
           {fileAttachments.map((att) => (
             <button
               key={att.id}
-              onClick={() => setPreview(att)}
+              onClick={() => handleRowClick(att)}
+              onDoubleClick={() => openExternal(att)}
               className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md border border-border-primary hover:bg-bg-hover transition-colors"
+              title={att.filename ?? "Unnamed"}
             >
               <span className="text-text-tertiary">{getFileIcon(att.mime_type)}</span>
               <span className="text-text-secondary truncate max-w-[200px]">
@@ -60,6 +86,9 @@ export function AttachmentList({ accountId, messageId, attachments, referencedCi
                 <span className="text-text-tertiary whitespace-nowrap">
                   {formatFileSize(att.size)}
                 </span>
+              )}
+              {openingId === att.id && (
+                <span className="text-text-tertiary text-[10px]">Opening...</span>
               )}
             </button>
           ))}
@@ -91,39 +120,21 @@ export function AttachmentPreview({
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const bytesRef = useRef<Uint8Array | null>(null);
 
   const isPreviewable = canPreview(attachment.mime_type, attachment.filename);
-
-  const fetchData = useCallback(async (): Promise<Uint8Array> => {
-    if (bytesRef.current) return bytesRef.current;
-
-    const provider = await getEmailProvider(accountId);
-    const response = await provider.fetchAttachment(messageId, attachment.gmail_attachment_id!);
-
-    // Normalize URL-safe base64 (Gmail API) to standard base64
-    const base64 = response.data.replace(/-/g, "+").replace(/_/g, "/");
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    bytesRef.current = bytes;
-    return bytes;
-  }, [accountId, messageId, attachment.gmail_attachment_id]);
 
   const handlePreviewLoad = useCallback(async () => {
     if (!attachment.gmail_attachment_id || !isPreviewable || blobUrl) return;
 
     setLoading(true);
     try {
-      const bytes = await fetchData();
       const effectiveMime = isPdf(attachment.mime_type, attachment.filename)
         ? "application/pdf"
         : (attachment.mime_type ?? "application/octet-stream");
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: effectiveMime });
+      const blob = await fetchAttachmentBlob(accountId, messageId, attachment, effectiveMime);
       setBlobUrl(URL.createObjectURL(blob));
     } catch (err) {
       console.error("Failed to load preview:", err);
@@ -131,7 +142,7 @@ export function AttachmentPreview({
     } finally {
       setLoading(false);
     }
-  }, [attachment, isPreviewable, blobUrl, fetchData]);
+  }, [attachment, accountId, messageId, isPreviewable, blobUrl]);
 
   // Trigger preview load for previewable types
   useEffect(() => {
@@ -155,12 +166,24 @@ export function AttachmentPreview({
         return;
       }
 
-      const bytes = await fetchData();
+      const bytes = await fetchAttachmentBytes(accountId, messageId, attachment);
       await writeFile(filePath, bytes);
     } catch (err) {
       console.error("Failed to save attachment:", err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleOpenExternal = async () => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      await openAttachmentWithDefaultApp(accountId, messageId, attachment);
+    } catch (err) {
+      console.error("Failed to open attachment with default app:", err);
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -183,6 +206,15 @@ export function AttachmentPreview({
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-4">
+        <button
+          onClick={handleOpenExternal}
+          disabled={opening}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-primary border border-border-primary hover:bg-bg-hover rounded-md transition-colors disabled:opacity-50"
+          title="Open with default application"
+        >
+          <ExternalLink size={13} />
+          {opening ? "Opening..." : "Open"}
+        </button>
         <button
           onClick={handleDownload}
           disabled={saving}

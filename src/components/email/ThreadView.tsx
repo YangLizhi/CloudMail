@@ -405,11 +405,8 @@ export function ThreadView({ thread }: ThreadViewProps) {
               />
             ))}
           </ErrorBoundary>
-        </div>
 
-        {/* Bottom reply area: pinned right above the status bar (no gap) */}
-        <div className="shrink-0 border-t border-border-primary max-h-[45vh] overflow-y-auto">
-          {/* Smart Reply Suggestions */}
+          {/* Smart Reply Suggestions — shown right below the last message */}
           {activeAccountId && messages.length > 0 && (
             <SmartReplySuggestions
               threadId={thread.id}
@@ -419,7 +416,7 @@ export function ThreadView({ thread }: ThreadViewProps) {
             />
           )}
 
-          {/* Inline Reply */}
+          {/* Inline Reply — directly below the sender / last message */}
           {activeAccountId && (
             <InlineReply
               thread={thread}

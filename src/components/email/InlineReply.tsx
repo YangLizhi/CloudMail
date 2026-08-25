@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
+import { EditorToolbar } from "@/components/composer/EditorToolbar";
 import { Reply, ReplyAll, Forward, Send, Maximize2, RotateCcw, X, Loader2 } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useComposerStore } from "@/stores/composerStore";
@@ -51,10 +53,14 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, link: { openOnClick: false } }),
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: { openOnClick: false },
+      }),
       Placeholder.configure({
         placeholder: "Write your reply...",
       }),
+      Image.configure({ inline: true, allowBase64: true }),
     ],
     content: "",
     editorProps: {
@@ -387,6 +393,9 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
           />
         </div>
       </div>
+
+      {/* Formatting toolbar */}
+      <EditorToolbar editor={editor} />
 
       {/* Editor */}
       <div className="relative">

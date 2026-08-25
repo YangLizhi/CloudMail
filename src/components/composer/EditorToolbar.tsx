@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import { useEditorState } from "@tiptap/react";
 import {
   Bold,
   Italic,
@@ -38,6 +39,25 @@ const FONT_FAMILIES = [
   "黑体",
   "微软雅黑",
 ];
+const TEXT_COLORS = [
+  "#000000",
+  "#7f1d1d",
+  "#9a3412",
+  "#166534",
+  "#1d4ed8",
+  "#6d28d9",
+  "#be185d",
+  "#475569",
+];
+const HIGHLIGHT_COLORS = [
+  "#fef08a",
+  "#fecaca",
+  "#bbf7d0",
+  "#bfdbfe",
+  "#ddd6fe",
+  "#fbcfe8",
+  "#ffffff",
+];
 
 interface EditorToolbarProps {
   editor: Editor | null;
@@ -56,7 +76,36 @@ export function EditorToolbar({
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
 
-  if (!editor) return null;
+  // Re-render on editor state changes so dropdowns/buttons reflect the cursor.
+  const state = useEditorState({
+    editor,
+    selector: (ctx) => {
+      const ed = ctx.editor!;
+      return {
+        fontFamily: (ed.getAttributes("textStyle").fontFamily as string) ?? "",
+        fontSize: ((ed.getAttributes("textStyle").fontSize as string) ?? "").replace("px", ""),
+        color: (ed.getAttributes("textStyle").color as string) ?? "",
+        isBold: ed.isActive("bold"),
+        isItalic: ed.isActive("italic"),
+        isUnderline: ed.isActive("underline"),
+        isStrike: ed.isActive("strike"),
+        isH1: ed.isActive("heading", { level: 1 }),
+        isH2: ed.isActive("heading", { level: 2 }),
+        isH3: ed.isActive("heading", { level: 3 }),
+        isBullet: ed.isActive("bulletList"),
+        isOrdered: ed.isActive("orderedList"),
+        isBlockquote: ed.isActive("blockquote"),
+        isCodeBlock: ed.isActive("codeBlock"),
+        isAlignLeft: ed.isActive({ textAlign: "left" }),
+        isAlignCenter: ed.isActive({ textAlign: "center" }),
+        isAlignRight: ed.isActive({ textAlign: "right" }),
+        isAlignJustify: ed.isActive({ textAlign: "justify" }),
+        isLink: ed.isActive("link"),
+      };
+    },
+  });
+
+  if (!editor || !state) return null;
 
   const setColor = (color: string) =>
     editor.chain().focus().setMark("textStyle", { color }).run();
@@ -64,6 +113,8 @@ export function EditorToolbar({
     editor.chain().focus().unsetMark("textStyle").run();
   const setHighlight = (color: string) =>
     editor.chain().focus().setMark("highlight", { color }).run();
+  const clearHighlight = () =>
+    editor.chain().focus().unsetMark("highlight").run();
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,14 +159,32 @@ export function EditorToolbar({
     </button>
   );
 
+  const swatch = (
+    color: string,
+    title: string,
+    onClick: () => void,
+    isCurrent: boolean,
+  ) => (
+    <button
+      key={color}
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`w-4 h-4 rounded-sm border ${
+        isCurrent ? "ring-2 ring-accent" : "border-border-primary"
+      } hover:scale-110 transition-transform shrink-0`}
+      style={{ backgroundColor: color }}
+    />
+  );
+
   const sep = <div className="w-px h-4 bg-border-primary mx-1 shrink-0" />;
-  const currentAttrs = editor.getAttributes("textStyle");
 
   return (
     <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-border-secondary bg-bg-secondary flex-wrap">
+      {/* Font family */}
       <select
         title="Font family"
-        value={(currentAttrs.fontFamily as string) ?? ""}
+        value={state.fontFamily}
         onChange={(e) =>
           editor
             .chain()
@@ -133,9 +202,10 @@ export function EditorToolbar({
         ))}
       </select>
 
+      {/* Font size */}
       <select
         title="Font size"
-        value={(currentAttrs.fontSize as string)?.replace("px", "") ?? ""}
+        value={state.fontSize}
         onChange={(e) =>
           editor
             .chain()
@@ -155,60 +225,51 @@ export function EditorToolbar({
         ))}
       </select>
 
-      <input
-        type="color"
-        defaultValue="#000000"
-        onChange={(e) => setColor(e.target.value)}
-        className="h-7 w-7 border border-border-primary rounded cursor-pointer"
-        title="Text color"
-      />
-      {btn(
-        !!currentAttrs.color,
-        unsetColor,
-        "Reset text color",
-        <span className="text-[10px] leading-none">A</span>,
+      {/* Text color swatches (single click) */}
+      {TEXT_COLORS.map((c) =>
+        swatch(c, `Text ${c}`, () => setColor(c), state.color === c),
       )}
-      <input
-        type="color"
-        defaultValue="#fde047"
-        onChange={(e) => setHighlight(e.target.value)}
-        className="h-7 w-7 border border-border-primary rounded cursor-pointer"
-        title="Highlight color"
-      />
+      {btn(!!state.color, unsetColor, "Reset text color", <span className="text-[10px] leading-none">A</span>)}
+
+      {/* Highlight swatches (single click) */}
+      {HIGHLIGHT_COLORS.map((c) =>
+        swatch(c, `Highlight ${c}`, () => setHighlight(c), editor.isActive("highlight", { color: c })),
+      )}
+      {btn(false, clearHighlight, "Clear highlight", <span className="text-[10px] leading-none">H</span>)}
 
       {sep}
 
-      {btn(editor.isActive("bold"), () => editor.chain().focus().toggleBold().run(), "Bold", <Bold size={14} />)}
-      {btn(editor.isActive("italic"), () => editor.chain().focus().toggleItalic().run(), "Italic", <Italic size={14} />)}
-      {btn(editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run(), "Underline", <Underline size={14} />)}
-      {btn(editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run(), "Strikethrough", <Strikethrough size={14} />)}
+      {btn(state.isBold, () => editor.chain().focus().toggleBold().run(), "Bold", <Bold size={14} />)}
+      {btn(state.isItalic, () => editor.chain().focus().toggleItalic().run(), "Italic", <Italic size={14} />)}
+      {btn(state.isUnderline, () => editor.chain().focus().toggleUnderline().run(), "Underline", <Underline size={14} />)}
+      {btn(state.isStrike, () => editor.chain().focus().toggleStrike().run(), "Strikethrough", <Strikethrough size={14} />)}
 
       {sep}
 
-      {btn(editor.isActive("heading", { level: 1 }), () => editor.chain().focus().toggleHeading({ level: 1 }).run(), "Heading 1", <span className="text-[10px] font-bold">H1</span>)}
-      {btn(editor.isActive("heading", { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "Heading 2", <span className="text-[10px] font-bold">H2</span>)}
-      {btn(editor.isActive("heading", { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "Heading 3", <span className="text-[10px] font-bold">H3</span>)}
+      {btn(state.isH1, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), "Heading 1", <span className="text-[10px] font-bold">H1</span>)}
+      {btn(state.isH2, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "Heading 2", <span className="text-[10px] font-bold">H2</span>)}
+      {btn(state.isH3, () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "Heading 3", <span className="text-[10px] font-bold">H3</span>)}
 
       {sep}
 
-      {btn(editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run(), "Bulleted list", <List size={14} />)}
-      {btn(editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run(), "Numbered list", <ListOrdered size={14} />)}
-      {btn(editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run(), "Quote", <Quote size={14} />)}
-      {btn(editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "Code", <Code size={14} />)}
+      {btn(state.isBullet, () => editor.chain().focus().toggleBulletList().run(), "Bulleted list", <List size={14} />)}
+      {btn(state.isOrdered, () => editor.chain().focus().toggleOrderedList().run(), "Numbered list", <ListOrdered size={14} />)}
+      {btn(state.isBlockquote, () => editor.chain().focus().toggleBlockquote().run(), "Quote", <Quote size={14} />)}
+      {btn(state.isCodeBlock, () => editor.chain().focus().toggleCodeBlock().run(), "Code", <Code size={14} />)}
 
       {sep}
 
-      {btn(editor.isActive({ textAlign: "left" }), () => editor.chain().focus().setTextAlign("left").run(), "Align left", <AlignLeft size={14} />)}
-      {btn(editor.isActive({ textAlign: "center" }), () => editor.chain().focus().setTextAlign("center").run(), "Align center", <AlignCenter size={14} />)}
-      {btn(editor.isActive({ textAlign: "right" }), () => editor.chain().focus().setTextAlign("right").run(), "Align right", <AlignRight size={14} />)}
-      {btn(editor.isActive({ textAlign: "justify" }), () => editor.chain().focus().setTextAlign("justify").run(), "Justify", <AlignJustify size={14} />)}
+      {btn(state.isAlignLeft, () => editor.chain().focus().setTextAlign("left").run(), "Align left", <AlignLeft size={14} />)}
+      {btn(state.isAlignCenter, () => editor.chain().focus().setTextAlign("center").run(), "Align center", <AlignCenter size={14} />)}
+      {btn(state.isAlignRight, () => editor.chain().focus().setTextAlign("right").run(), "Align right", <AlignRight size={14} />)}
+      {btn(state.isAlignJustify, () => editor.chain().focus().setTextAlign("justify").run(), "Justify", <AlignJustify size={14} />)}
       {btn(false, () => editor.chain().focus().indent().run(), "Increase indent", <IndentIncrease size={14} />)}
       {btn(false, () => editor.chain().focus().outdent().run(), "Decrease indent", <IndentDecrease size={14} />)}
 
       {sep}
 
       {btn(false, () => editor.chain().focus().setHorizontalRule().run(), "Horizontal rule", <Minus size={14} />)}
-      {btn(editor.isActive("link"), () => {
+      {btn(state.isLink, () => {
         if (editor.isActive("link")) {
           editor.chain().focus().unsetLink().run();
         } else {
@@ -284,6 +345,13 @@ export function EditorToolbar({
               className="px-2 py-1 text-xs font-medium text-white bg-accent hover:bg-accent-hover rounded"
             >
               Insert
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLinkDialog(false)}
+              className="px-2 py-1 text-xs text-text-tertiary hover:text-text-primary"
+            >
+              Cancel
             </button>
           </form>
         </div>

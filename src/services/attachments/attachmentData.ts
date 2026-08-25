@@ -1,5 +1,9 @@
 import type { DbAttachment } from "@/services/db/attachments";
 import { getEmailProvider } from "@/services/email/providerFactory";
+import {
+  loadCachedAttachmentById,
+  cacheAttachment,
+} from "./cacheManager";
 
 /**
  * Fetch raw attachment bytes for a message attachment.
@@ -10,6 +14,11 @@ export async function fetchAttachmentBytes(
   messageId: string,
   attachment: DbAttachment,
 ): Promise<Uint8Array> {
+  // Prefer the locally cached copy — this is fast, works offline, and avoids
+  // full-message IMAP fetches that some enterprise servers mishandle.
+  const cached = await loadCachedAttachmentById(attachment.id);
+  if (cached) return cached;
+
   if (!attachment.gmail_attachment_id) {
     throw new Error("Attachment has no fetch identifier");
   }
@@ -29,6 +38,14 @@ export async function fetchAttachmentBytes(
   for (let i = 0; i < binaryStr.length; i++) {
     bytes[i] = binaryStr.charCodeAt(i);
   }
+
+  // Best-effort persist for future access.
+  try {
+    await cacheAttachment(attachment.id, bytes);
+  } catch {
+    // Non-fatal — cache may be unavailable (e.g. read-only scope).
+  }
+
   return bytes;
 }
 
@@ -43,4 +60,16 @@ export async function fetchAttachmentBlob(
 ): Promise<Blob> {
   const bytes = await fetchAttachmentBytes(accountId, messageId, attachment);
   return new Blob([bytes.buffer as ArrayBuffer], { type: mimeType });
+}
+
+/**
+ * Encode raw bytes to a base64 string (chunked for large buffers).
+ */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }

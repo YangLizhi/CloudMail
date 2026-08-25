@@ -7,6 +7,7 @@ import { Download, Eye, ExternalLink } from "lucide-react";
 import { formatFileSize, isImage, isPdf, isText, canPreview, getFileIcon } from "@/utils/fileTypeHelpers";
 import { fetchAttachmentBlob, fetchAttachmentBytes } from "@/services/attachments/attachmentData";
 import { openAttachmentWithDefaultApp } from "@/services/attachments/openAttachment";
+import { appendDebugLog } from "@/services/debugLog";
 
 /** Dedup attachments by filename+size (content-based) */
 function dedup(attachments: DbAttachment[]): DbAttachment[] {
@@ -138,7 +139,13 @@ export function AttachmentPreview({
       setBlobUrl(URL.createObjectURL(blob));
     } catch (err) {
       console.error("Failed to load preview:", err);
-      setError("Failed to load preview");
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load preview: ${msg}`);
+      try {
+        await appendDebugLog("error", `attachment preview failed: ${msg}`);
+      } catch {
+        // ignore logging errors
+      }
     } finally {
       setLoading(false);
     }

@@ -62,21 +62,19 @@ export function EmailRenderer({
 
     (async () => {
       try {
-        const { getEmailProvider } = await import("@/services/email/providerFactory");
-        const provider = await getEmailProvider(accountId);
+        const {
+          fetchAttachmentBytes,
+          bytesToBase64,
+        } = await import("@/services/attachments/attachmentData");
         const resolved = new Map<string, string>();
 
         await Promise.all(
           cidAttachments.map(async (att) => {
             try {
-              const response = await provider.fetchAttachment(
-                messageId,
-                att.gmail_attachment_id!,
-              );
-              const base64 = response.data.replace(/-/g, "+").replace(/_/g, "/");
+              const bytes = await fetchAttachmentBytes(accountId, messageId, att);
               resolved.set(
                 normalizeCid(att.content_id!),
-                `data:${att.mime_type ?? "image/png"};base64,${base64}`,
+                `data:${att.mime_type ?? "image/png"};base64,${bytesToBase64(bytes)}`,
               );
             } catch {
               // Skip individual failures

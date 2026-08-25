@@ -61,6 +61,25 @@ export async function loadCachedAttachment(
   }
 }
 
+/**
+ * Load an attachment's cached bytes directly by its attachment ID.
+ * The on-disk path is derived from the stable filename hash (independent of the
+ * possibly-stale `local_path` column), so previews work whenever the file was
+ * cached under `cloudmail-attachment-cache/`.
+ */
+export async function loadCachedAttachmentById(
+  attachmentId: string,
+): Promise<Uint8Array | null> {
+  const { readFile, BaseDirectory } = await import("@tauri-apps/plugin-fs");
+  const { join } = await import("@tauri-apps/api/path");
+  const relPath = await join(CACHE_DIR, hashFileName(attachmentId));
+  try {
+    return await readFile(relPath, { baseDir: BaseDirectory.AppData });
+  } catch {
+    return null;
+  }
+}
+
 export async function getCacheSize(): Promise<number> {
   const db = await getDb();
   const rows = await db.select<{ total: number }[]>(

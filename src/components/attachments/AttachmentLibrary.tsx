@@ -9,8 +9,8 @@ import {
   type AttachmentWithContext,
   type AttachmentSender,
 } from "@/services/db/attachments";
-import { getEmailProvider } from "@/services/email/providerFactory";
 import { openAttachmentWithDefaultApp } from "@/services/attachments/openAttachment";
+import { fetchAttachmentBytes } from "@/services/attachments/attachmentData";
 import { AttachmentPreview } from "@/components/email/AttachmentList";
 import { AttachmentGridItem } from "./AttachmentGridItem";
 import { AttachmentListItem } from "./AttachmentListItem";
@@ -164,14 +164,7 @@ export function AttachmentLibrary() {
       });
       if (!filePath) return;
 
-      const provider = await getEmailProvider(accountId);
-      const response = await provider.fetchAttachment(att.message_id, att.gmail_attachment_id);
-      const base64 = response.data.replace(/-/g, "+").replace(/_/g, "/");
-      const binaryStr = atob(base64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      const bytes = await fetchAttachmentBytes(accountId, att.message_id, att);
       await writeFile(filePath, bytes);
     } catch (err) {
       console.error("Download failed:", err);

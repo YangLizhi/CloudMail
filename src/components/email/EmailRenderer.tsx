@@ -146,26 +146,50 @@ export function EmailRenderer({
   <style>
     body {
       margin: 0;
-      padding: 16px;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 14px;
-      line-height: 1.6;
+      padding: 20px 28px 36px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      font-size: 15px;
+      line-height: 1.75;
       color: ${plainTextDark ? "#e5e7eb" : "#1f2937"};
-      background: ${htmlDark ? "#f8f9fa" : "transparent"};
+      background: ${htmlDark ? "#ffffff" : plainTextDark ? "#111827" : "#ffffff"};
       word-wrap: break-word;
       overflow-wrap: break-word;
-      overflow: hidden;
+      overflow-x: auto;
     }
-    img { max-width: 100%; height: auto; }
-    a { color: ${plainTextDark ? "#60a5fa" : "#3b82f6"}; }
+    p { margin: 0 0 0.8em 0; }
+    h1, h2, h3, h4, h5, h6 { margin: 1.1em 0 0.5em; line-height: 1.4; }
+    ul, ol { margin: 0 0 0.9em; padding-left: 1.5em; }
+    li { margin: 0.12em 0; }
+    img { max-width: 100% !important; height: auto !important; }
+    table {
+      border-collapse: collapse !important;
+      max-width: 100% !important;
+      box-sizing: border-box;
+    }
+    table, td, th { box-sizing: border-box; }
+    td, th {
+      vertical-align: top;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    a {
+      color: ${plainTextDark ? "#60a5fa" : "#1a73e8"};
+      text-decoration: none;
+    }
     blockquote {
       border-left: 3px solid ${plainTextDark ? "#4b5563" : "#d1d5db"};
-      margin: 8px 0;
-      padding: 4px 12px;
+      margin: 0.75em 0;
+      padding: 0.25em 12px;
       color: ${plainTextDark ? "#9ca3af" : "#6b7280"};
     }
-    pre { overflow-x: auto; }
-    table { max-width: 100%; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+      background: #f3f4f6;
+      padding: 12px;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>${bodyHtml}</body>

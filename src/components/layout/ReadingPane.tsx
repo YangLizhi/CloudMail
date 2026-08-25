@@ -10,14 +10,14 @@ export function ReadingPane() {
 
   if (!selectedThread) {
     return (
-      <div className="flex-1 flex flex-col bg-bg-primary/50 glass-panel">
+      <div className="flex-1 flex flex-col bg-white border-l border-border-primary">
         <EmptyState illustration={ReadingPaneIllustration} title="CloudMail" subtitle="Select an email to read" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 bg-bg-primary/50 overflow-hidden glass-panel">
+    <div className="flex-1 bg-white border-l border-border-primary overflow-hidden">
       <ThreadView thread={selectedThread} />
     </div>
   );

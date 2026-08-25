@@ -24,6 +24,8 @@ import {
   Undo2,
   Redo2,
   Sparkles,
+  PaintBucket,
+  Eraser,
 } from "lucide-react";
 
 const FONT_SIZES = ["12", "14", "16", "18", "20", "24", "28", "32"];
@@ -74,9 +76,10 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const paletteRef = useRef<HTMLDivElement | null>(null);
+  const [palette, setPalette] = useState<"color" | "highlight" | null>(null);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
 
-  // Re-render on editor state changes so dropdowns/buttons reflect the cursor.
   const state = useEditorState({
     editor,
     selector: (ctx) => {
@@ -109,12 +112,15 @@ export function EditorToolbar({
 
   const setColor = (color: string) =>
     editor.chain().focus().setMark("textStyle", { color }).run();
-  const unsetColor = () =>
+  const clearColor = () =>
     editor.chain().focus().unsetMark("textStyle").run();
   const setHighlight = (color: string) =>
     editor.chain().focus().setMark("highlight", { color }).run();
   const clearHighlight = () =>
     editor.chain().focus().unsetMark("highlight").run();
+  const clearFormatting = () => {
+    editor.chain().focus().unsetMark("textStyle").unsetMark("highlight").run();
+  };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,7 +147,7 @@ export function EditorToolbar({
       .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
       .run();
 
-  const btn = (
+  const pb = (
     isActive: boolean,
     onClick: () => void,
     title: string,
@@ -152,174 +158,234 @@ export function EditorToolbar({
       onClick={onClick}
       title={title}
       className={`p-1.5 text-xs rounded hover:bg-bg-hover transition-colors ${
-        isActive ? "bg-accent/10 text-accent font-semibold" : "text-text-secondary"
+        isActive ? "bg-accent/10 text-accent" : "text-text-primary"
       }`}
     >
       {children}
     </button>
   );
-
-  const swatch = (
-    color: string,
-    title: string,
-    onClick: () => void,
-    isCurrent: boolean,
-  ) => (
-    <button
-      key={color}
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={`w-4 h-4 rounded-sm border ${
-        isCurrent ? "ring-2 ring-accent" : "border-border-primary"
-      } hover:scale-110 transition-transform shrink-0`}
-      style={{ backgroundColor: color }}
-    />
+  const sep = <div className="w-px h-4 bg-border-primary mx-1 shrink-0" />;
+  const group = (children: React.ReactNode) => (
+    <div className="flex items-center gap-0.5">{children}</div>
   );
 
-  const sep = <div className="w-px h-4 bg-border-primary mx-1 shrink-0" />;
-
   return (
-    <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-border-secondary bg-bg-secondary flex-wrap">
-      {/* Font family */}
-      <select
-        title="Font family"
-        value={state.fontFamily}
-        onChange={(e) =>
-          editor
-            .chain()
-            .focus()
-            .setMark("textStyle", { fontFamily: e.target.value || null })
-            .run()
-        }
-        className="h-7 text-xs bg-transparent text-text-secondary rounded px-1 max-w-[110px]"
-      >
-        <option value="">字体</option>
-        {FONT_FAMILIES.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
+    <div className="relative border-b border-border-secondary bg-bg-secondary">
+      <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
+        {/* Font group */}
+        {group(
+          <>
+            <select
+              title="字体"
+              value={state.fontFamily}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .setMark("textStyle", { fontFamily: e.target.value || null })
+                  .run()
+              }
+              className="h-7 text-xs bg-transparent text-text-primary rounded px-1 max-w-[104px] border border-border-primary"
+            >
+              <option value="">字体</option>
+              {FONT_FAMILIES.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+            <select
+              title="字号"
+              value={state.fontSize}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .setMark("textStyle", {
+                    fontSize: e.target.value ? `${e.target.value}px` : null,
+                  })
+                  .run()
+              }
+              className="h-7 text-xs bg-transparent text-text-primary rounded px-1 max-w-[62px] border border-border-primary"
+            >
+              <option value="">字号</option>
+              {FONT_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {pb(false, clearFormatting, "清除格式", <Eraser size={14} />)}
+          </>,
+        )}
 
-      {/* Font size */}
-      <select
-        title="Font size"
-        value={state.fontSize}
-        onChange={(e) =>
-          editor
-            .chain()
-            .focus()
-            .setMark("textStyle", {
-              fontSize: e.target.value ? `${e.target.value}px` : null,
-            })
-            .run()
-        }
-        className="h-7 text-xs bg-transparent text-text-secondary rounded px-1 max-w-[64px]"
-      >
-        <option value="">字号</option>
-        {FONT_SIZES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        {sep}
 
-      {/* Text color swatches (single click) */}
-      {TEXT_COLORS.map((c) =>
-        swatch(c, `Text ${c}`, () => setColor(c), state.color === c),
-      )}
-      {btn(!!state.color, unsetColor, "Reset text color", <span className="text-[10px] leading-none">A</span>)}
+        {/* Character group */}
+        {group(
+          <>
+            {pb(state.isBold, () => editor.chain().focus().toggleBold().run(), "加粗", <Bold size={14} />)}
+            {pb(state.isItalic, () => editor.chain().focus().toggleItalic().run(), "斜体", <Italic size={14} />)}
+            {pb(state.isUnderline, () => editor.chain().focus().toggleUnderline().run(), "下划线", <Underline size={14} />)}
+            {pb(state.isStrike, () => editor.chain().focus().toggleStrike().run(), "删除线", <Strikethrough size={14} />)}
+            {pb(
+              !!state.color,
+              () => setPalette(palette === "color" ? null : "color"),
+              "字体颜色",
+              <span className="relative inline-flex items-center">
+                <span
+                  className="text-sm font-bold leading-none"
+                  style={{ color: state.color || "#1f2937" }}
+                >
+                  A
+                </span>
+                <span
+                  className="absolute -bottom-1 left-0 right-0 h-0.5 rounded"
+                  style={{ backgroundColor: state.color || "#1f2937" }}
+                />
+              </span>,
+            )}
+            {pb(
+              false,
+              () => setPalette(palette === "highlight" ? null : "highlight"),
+              "高亮颜色",
+              <PaintBucket size={14} />,
+            )}
+          </>,
+        )}
 
-      {/* Highlight swatches (single click) */}
-      {HIGHLIGHT_COLORS.map((c) =>
-        swatch(c, `Highlight ${c}`, () => setHighlight(c), editor.isActive("highlight", { color: c })),
-      )}
-      {btn(false, clearHighlight, "Clear highlight", <span className="text-[10px] leading-none">H</span>)}
+        {sep}
 
-      {sep}
+        {/* Paragraph group */}
+        {group(
+          <>
+            {pb(state.isH1, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), "标题 1", <span className="text-[10px] font-bold">H1</span>)}
+            {pb(state.isH2, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "标题 2", <span className="text-[10px] font-bold">H2</span>)}
+            {pb(state.isH3, () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "标题 3", <span className="text-[10px] font-bold">H3</span>)}
+            {pb(state.isBullet, () => editor.chain().focus().toggleBulletList().run(), "项目符号", <List size={14} />)}
+            {pb(state.isOrdered, () => editor.chain().focus().toggleOrderedList().run(), "编号列表", <ListOrdered size={14} />)}
+            {pb(state.isBlockquote, () => editor.chain().focus().toggleBlockquote().run(), "引用", <Quote size={14} />)}
+            {pb(state.isCodeBlock, () => editor.chain().focus().toggleCodeBlock().run(), "代码", <Code size={14} />)}
+          </>,
+        )}
 
-      {btn(state.isBold, () => editor.chain().focus().toggleBold().run(), "Bold", <Bold size={14} />)}
-      {btn(state.isItalic, () => editor.chain().focus().toggleItalic().run(), "Italic", <Italic size={14} />)}
-      {btn(state.isUnderline, () => editor.chain().focus().toggleUnderline().run(), "Underline", <Underline size={14} />)}
-      {btn(state.isStrike, () => editor.chain().focus().toggleStrike().run(), "Strikethrough", <Strikethrough size={14} />)}
+        {sep}
 
-      {sep}
+        {/* Alignment group */}
+        {group(
+          <>
+            {pb(state.isAlignLeft, () => editor.chain().focus().setTextAlign("left").run(), "左对齐", <AlignLeft size={14} />)}
+            {pb(state.isAlignCenter, () => editor.chain().focus().setTextAlign("center").run(), "居中", <AlignCenter size={14} />)}
+            {pb(state.isAlignRight, () => editor.chain().focus().setTextAlign("right").run(), "右对齐", <AlignRight size={14} />)}
+            {pb(state.isAlignJustify, () => editor.chain().focus().setTextAlign("justify").run(), "两端对齐", <AlignJustify size={14} />)}
+            {pb(false, () => editor.chain().focus().indent().run(), "增加缩进", <IndentIncrease size={14} />)}
+            {pb(false, () => editor.chain().focus().outdent().run(), "减少缩进", <IndentDecrease size={14} />)}
+          </>,
+        )}
 
-      {btn(state.isH1, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), "Heading 1", <span className="text-[10px] font-bold">H1</span>)}
-      {btn(state.isH2, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "Heading 2", <span className="text-[10px] font-bold">H2</span>)}
-      {btn(state.isH3, () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "Heading 3", <span className="text-[10px] font-bold">H3</span>)}
+        {sep}
 
-      {sep}
+        {/* Insert group */}
+        {group(
+          <>
+            {pb(false, () => editor.chain().focus().setHorizontalRule().run(), "分隔线", <Minus size={14} />)}
+            {pb(state.isLink, () => {
+              if (editor.isActive("link")) {
+                editor.chain().focus().unsetLink().run();
+              } else {
+                setShowLinkDialog(true);
+              }
+            }, "链接", <Link size={14} />)}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageSelect}
+            />
+            {pb(false, () => imageInputRef.current?.click(), "插入图片", <Image size={14} />)}
+            {pb(false, insertTable, "插入表格", <Table size={14} />)}
+            {onInsertAttachment && (
+              <>
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleAttachmentSelect}
+                />
+                {pb(false, () => attachmentInputRef.current?.click(), "插入附件", <Paperclip size={14} />)}
+              </>
+            )}
+          </>,
+        )}
 
-      {btn(state.isBullet, () => editor.chain().focus().toggleBulletList().run(), "Bulleted list", <List size={14} />)}
-      {btn(state.isOrdered, () => editor.chain().focus().toggleOrderedList().run(), "Numbered list", <ListOrdered size={14} />)}
-      {btn(state.isBlockquote, () => editor.chain().focus().toggleBlockquote().run(), "Quote", <Quote size={14} />)}
-      {btn(state.isCodeBlock, () => editor.chain().focus().toggleCodeBlock().run(), "Code", <Code size={14} />)}
+        <div className="flex-1" />
 
-      {sep}
+        {/* History group */}
+        {group(
+          <>
+            {onToggleAiAssist && (
+              <button
+                type="button"
+                onClick={onToggleAiAssist}
+                title="AI 助手"
+                className={`px-1.5 py-1 text-xs rounded hover:bg-bg-hover transition-colors flex items-center gap-1 ${
+                  aiAssistOpen ? "bg-accent/10 text-accent" : "text-text-primary"
+                }`}
+              >
+                <Sparkles size={12} />
+                AI
+              </button>
+            )}
+            {pb(false, () => editor.chain().focus().undo().run(), "撤销", <Undo2 size={14} />)}
+            {pb(false, () => editor.chain().focus().redo().run(), "重做", <Redo2 size={14} />)}
+          </>,
+        )}
+      </div>
 
-      {btn(state.isAlignLeft, () => editor.chain().focus().setTextAlign("left").run(), "Align left", <AlignLeft size={14} />)}
-      {btn(state.isAlignCenter, () => editor.chain().focus().setTextAlign("center").run(), "Align center", <AlignCenter size={14} />)}
-      {btn(state.isAlignRight, () => editor.chain().focus().setTextAlign("right").run(), "Align right", <AlignRight size={14} />)}
-      {btn(state.isAlignJustify, () => editor.chain().focus().setTextAlign("justify").run(), "Justify", <AlignJustify size={14} />)}
-      {btn(false, () => editor.chain().focus().indent().run(), "Increase indent", <IndentIncrease size={14} />)}
-      {btn(false, () => editor.chain().focus().outdent().run(), "Decrease indent", <IndentDecrease size={14} />)}
-
-      {sep}
-
-      {btn(false, () => editor.chain().focus().setHorizontalRule().run(), "Horizontal rule", <Minus size={14} />)}
-      {btn(state.isLink, () => {
-        if (editor.isActive("link")) {
-          editor.chain().focus().unsetLink().run();
-        } else {
-          setShowLinkDialog(true);
-        }
-      }, "Link", <Link size={14} />)}
-
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleImageSelect}
-      />
-      {btn(false, () => imageInputRef.current?.click(), "Insert image", <Image size={14} />)}
-      {btn(false, insertTable, "Insert table", <Table size={14} />)}
-
-      {onInsertAttachment && (
-        <>
-          <input
-            ref={attachmentInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleAttachmentSelect}
-          />
-          {btn(false, () => attachmentInputRef.current?.click(), "Insert attachment", <Paperclip size={14} />)}
-        </>
-      )}
-
-      <div className="flex-1" />
-
-      {onToggleAiAssist && (
-        <button
-          type="button"
-          onClick={onToggleAiAssist}
-          title="AI Assist"
-          className={`px-1.5 py-1 text-xs rounded hover:bg-bg-hover transition-colors flex items-center gap-1 ${
-            aiAssistOpen ? "bg-accent/10 text-accent font-semibold" : "text-text-secondary"
-          }`}
+      {/* Color / highlight palette popover */}
+      {(palette === "color" || palette === "highlight") && (
+        <div
+          ref={paletteRef}
+          className="absolute z-40 top-full left-2 mt-1 bg-bg-primary border border-border-primary rounded-md shadow-lg p-2"
         >
-          <Sparkles size={12} />
-          AI
-        </button>
+          <div className="flex items-center gap-1 flex-wrap">
+            {(palette === "color" ? TEXT_COLORS : HIGHLIGHT_COLORS).map((c) => (
+              <button
+                key={c}
+                type="button"
+                title={c}
+                onClick={() => {
+                  if (palette === "color") setColor(c);
+                  else setHighlight(c);
+                  setPalette(null);
+                }}
+                className={`w-5 h-5 rounded-sm border ${
+                  (palette === "color" ? state.color : "") === c
+                    ? "ring-2 ring-accent"
+                    : "border-border-primary"
+                } hover:scale-110 transition-transform`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (palette === "color") clearColor();
+              else clearHighlight();
+              setPalette(null);
+            }}
+            className="mt-2 w-full px-2 py-1 text-xs text-text-tertiary hover:text-text-primary rounded hover:bg-bg-hover"
+          >
+            清除{palette === "color" ? "字体颜色" : "高亮"}
+          </button>
+        </div>
       )}
 
-      {btn(false, () => editor.chain().focus().undo().run(), "Undo", <Undo2 size={14} />)}
-      {btn(false, () => editor.chain().focus().redo().run(), "Redo", <Redo2 size={14} />)}
-
+      {/* Link dialog */}
       {showLinkDialog && (
-        <div className="absolute z-30 mt-1 bg-bg-primary border border-border-primary rounded-md shadow-lg px-3 py-2 right-6">
+        <div className="absolute z-40 top-full left-2 mt-1 bg-bg-primary border border-border-primary rounded-md shadow-lg px-3 py-2">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -344,14 +410,14 @@ export function EditorToolbar({
               type="submit"
               className="px-2 py-1 text-xs font-medium text-white bg-accent hover:bg-accent-hover rounded"
             >
-              Insert
+              插入
             </button>
             <button
               type="button"
               onClick={() => setShowLinkDialog(false)}
               className="px-2 py-1 text-xs text-text-tertiary hover:text-text-primary"
             >
-              Cancel
+              取消
             </button>
           </form>
         </div>

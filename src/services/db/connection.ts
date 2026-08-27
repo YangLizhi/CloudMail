@@ -1,6 +1,64 @@
 import Database from "@tauri-apps/plugin-sql";
+import { exists, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 
 let db: Database | null = null;
+let dbMigration: { promise: Promise<void>; resolve: () => void } | null = null;
+
+/** Enter migration mode: block any getDb() until endDbMigration(). */
+export function beginDbMigration(): Promise<void> {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  dbMigration = { promise, resolve };
+  return promise;
+}
+
+/** Exit migration mode, releasing any waiting getDb() calls. */
+export function endDbMigration(): void {
+  const m = dbMigration;
+  dbMigration = null;
+  m?.resolve();
+}
+
+const DB_DIR_FILE = "cloudmail-db-dir.txt";
+let customDbDir: string | null = null;
+let customDbDirLoaded = false;
+
+/** Remember the user-chosen DB directory for the running session. */
+export function setCustomDbDir(dir: string | null): void {
+  customDbDir = dir;
+  customDbDirLoaded = true;
+}
+
+/** Decide which SQLite path to open: default root, or `data/` junction. */
+async function resolveDbPath(): Promise<string> {
+  if (!customDbDirLoaded) {
+    customDbDirLoaded = true;
+    try {
+      if (await exists(DB_DIR_FILE, { baseDir: BaseDirectory.AppData })) {
+        const content = (
+          await readTextFile(DB_DIR_FILE, { baseDir: BaseDirectory.AppData })
+        ).trim();
+        customDbDir = content || null;
+      }
+    } catch {
+      customDbDir = null;
+    }
+  }
+  return customDbDir ? "sqlite:data/cloudmail.db" : "sqlite:cloudmail.db";
+}
+
+/** Close the current database connection (used before moving its file). */
+export async function closeDb(): Promise<void> {
+  if (!db) return;
+  try {
+    await db.close();
+  } catch (err) {
+    console.warn("Failed to close DB:", err);
+  }
+  db = null;
+}
 
 function isLockedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -8,8 +66,12 @@ function isLockedError(err: unknown): boolean {
 }
 
 export async function getDb(): Promise<Database> {
+  if (dbMigration) {
+    await dbMigration.promise;
+  }
   if (!db) {
-    const raw = await Database.load("sqlite:cloudmail.db");
+    const path = await resolveDbPath();
+    const raw = await Database.load(path);
     try {
       await raw.execute("PRAGMA busy_timeout = 30000");
       await raw.execute("PRAGMA journal_mode = WAL");

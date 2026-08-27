@@ -1,6 +1,6 @@
 {
   "name": "velo",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -31,6 +31,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-sql": "^2.3.2",
     "@tauri-apps/plugin-updater": "^2.10.0",
+    "@tinymce/tinymce-react": "^6.3.0",
     "@tiptap/core": "^3.19.0",
     "@tiptap/extension-color": "^3.19.0",
     "@tiptap/extension-highlight": "^3.19.0",
@@ -52,6 +53,7 @@
     "react-markdown": "^10.1.0",
     "react-transition-group": "^4.4.5",
     "remark-gfm": "^4.0.1",
+    "tinymce": "^6.8.6",
     "tsdav": "^2.1.8",
     "zustand": "^5.0.11"
   },

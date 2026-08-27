@@ -1,10 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Trash2, Pencil, ChevronDown } from "lucide-react";
-import { EditorToolbar } from "@/components/composer/EditorToolbar";
+import { TinyMceEditor, type RichTextEditorApi } from "@/components/composer/TinyMceEditor";
 import { useAccountStore } from "@/stores/accountStore";
 import {
   getTemplatesForAccount,
@@ -23,20 +19,8 @@ export function TemplateEditor() {
   const [subject, setSubject] = useState("");
   const [shortcut, setShortcut] = useState("");
   const [showForm, setShowForm] = useState(false);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false } }),
-      Image.configure({ inline: true, allowBase64: true }),
-      Placeholder.configure({ placeholder: "Write your template..." }),
-    ],
-    content: "",
-    editorProps: {
-      attributes: {
-        class: "prose prose-sm max-w-none px-3 py-2 min-h-[80px] focus:outline-none text-text-primary text-xs",
-      },
-    },
-  });
+  const editorRef = useRef<RichTextEditorApi | null>(null);
+  const pendingInitRef = useRef<string | null>(null);
 
   const loadTemplates = useCallback(async () => {
     if (!activeAccountId) return;
@@ -55,13 +39,13 @@ export function TemplateEditor() {
     setShortcut("");
     setEditingId(null);
     setShowForm(false);
-    editor?.commands.setContent("");
-  }, [editor]);
+    editorRef.current?.setContent("", false);
+  }, []);
 
   const handleSave = useCallback(async () => {
-    if (!activeAccountId || !editor || !name.trim()) return;
+    if (!activeAccountId || !name.trim()) return;
 
-    const bodyHtml = editor.getHTML();
+    const bodyHtml = editorRef.current?.getContent() ?? "";
 
     if (editingId) {
       await updateTemplate(editingId, {
@@ -82,7 +66,7 @@ export function TemplateEditor() {
 
     resetForm();
     await loadTemplates();
-  }, [activeAccountId, editor, name, subject, shortcut, editingId, resetForm, loadTemplates]);
+  }, [activeAccountId, name, subject, shortcut, editingId, resetForm, loadTemplates]);
 
   const handleEdit = useCallback((tmpl: DbTemplate) => {
     setEditingId(tmpl.id);
@@ -90,8 +74,9 @@ export function TemplateEditor() {
     setSubject(tmpl.subject ?? "");
     setShortcut(tmpl.shortcut ?? "");
     setShowForm(true);
-    editor?.commands.setContent(tmpl.body_html);
-  }, [editor]);
+    pendingInitRef.current = tmpl.body_html ?? "";
+    editorRef.current?.setContent(tmpl.body_html ?? "", false);
+  }, []);
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteTemplate(id);
@@ -153,12 +138,21 @@ export function TemplateEditor() {
             className="w-full px-3 py-1.5 bg-bg-tertiary border border-border-primary rounded text-sm text-text-primary outline-none focus:border-accent"
           />
           <div className="border border-border-primary rounded overflow-hidden bg-bg-tertiary">
-            <EditorToolbar editor={editor} />
-            <EditorContent editor={editor} />
+            <TinyMceEditor
+              height={200}
+              placeholder="Write your template..."
+              onReady={(api) => {
+                editorRef.current = api;
+                if (pendingInitRef.current !== null) {
+                  api.setContent(pendingInitRef.current, false);
+                  pendingInitRef.current = null;
+                }
+              }}
+            />
           </div>
           <InsertVariableDropdown
             onInsert={(variable) => {
-              editor?.chain().focus().insertContent(variable).run();
+              editorRef.current?.insertContent(variable);
             }}
           />
           <input

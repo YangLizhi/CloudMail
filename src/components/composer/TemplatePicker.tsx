@@ -3,10 +3,10 @@ import { FileText, ChevronDown } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useComposerStore } from "@/stores/composerStore";
 import { getTemplatesForAccount, type DbTemplate } from "@/services/db/templates";
-import type { Editor } from "@tiptap/react";
+import type { RichTextEditorApi } from "./TinyMceEditor";
 
 interface TemplatePickerProps {
-  editor: Editor | null;
+  editor: RichTextEditorApi | null;
 }
 
 export function TemplatePicker({ editor }: TemplatePickerProps) {
@@ -42,7 +42,7 @@ export function TemplatePicker({ editor }: TemplatePickerProps) {
     }
 
     // Insert template body at cursor
-    editor.commands.insertContent(tmpl.body_html);
+    editor.insertContent(tmpl.body_html);
     setIsOpen(false);
   }, [editor, mode, subject, setSubject]);
 

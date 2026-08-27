@@ -1,7 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { EditorToolbar } from "@/components/composer/EditorToolbar";
-import { buildRichTextExtensions } from "@/components/composer/richText";
+import { TinyMceEditor, type RichTextEditorApi } from "@/components/composer/TinyMceEditor";
 import { Reply, ReplyAll, Forward, Send, Maximize2, RotateCcw, X, Loader2 } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useComposerStore } from "@/stores/composerStore";
@@ -21,17 +19,19 @@ import {
 import type { DbMessage } from "@/services/db/messages";
 import type { Thread } from "@/stores/threadStore";
 
-type ReplyMode = "reply" | "replyAll" | "forward";
+export type ReplyMode = "reply" | "replyAll" | "forward";
 
 interface InlineReplyProps {
   thread: Thread;
   messages: DbMessage[];
   accountId: string;
   noReply?: boolean;
+  /** Called whenever the inline reply opens/closes. Lets the parent hide the message list. */
+  onModeChange?: (mode: ReplyMode | null) => void;
   onSent: () => void;
 }
 
-export function InlineReply({ thread, messages, accountId, noReply, onSent }: InlineReplyProps) {
+export function InlineReply({ thread, messages, accountId, noReply, onModeChange, onSent }: InlineReplyProps) {
   const [mode, setMode] = useState<ReplyMode | null>(null);
   const [sending, setSending] = useState(false);
   const [signatureHtml, setSignatureHtml] = useState("");
@@ -49,21 +49,20 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   const containerRef = useRef<HTMLDivElement>(null);
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDraftAbortRef = useRef(false);
+  const editorRef = useRef<RichTextEditorApi | null>(null);
+  const pendingQuoteRef = useRef<string | null>(null);
+  const pendingDraftModeRef = useRef<AutoDraftMode | null>(null);
 
   const lastMessage = messages[messages.length - 1];
 
-  const editor = useEditor({
-    extensions: buildRichTextExtensions("Write your reply..."),
-    content: "",
-    editorProps: {
-      attributes: {
-        class: "prose prose-sm max-w-none px-4 py-3 min-h-full focus:outline-none text-text-primary text-sm",
-      },
-    },
-  });
+  // Report open/closed state to the parent (so ThreadView can hide the message list).
+  useEffect(() => {
+    onModeChange?.(mode);
+  }, [mode, onModeChange]);
 
   const loadAutoDraft = useCallback(async (draftMode: AutoDraftMode) => {
-    if (!editor) return;
+    const ed = editorRef.current;
+    if (!ed) return;
     autoDraftAbortRef.current = false;
     setAutoDraftLoading(true);
     try {
@@ -74,8 +73,8 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       if (autoDraftAbortRef.current || !draft) return;
 
       // Only set content if the editor is still empty (user hasn't typed)
-      if (editor.isEmpty) {
-        editor.commands.setContent(draft);
+      if (ed.isEmpty()) {
+        ed.setContent(draft);
         setHasAutoDraft(true);
       }
     } catch (err) {
@@ -83,10 +82,10 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     } finally {
       setAutoDraftLoading(false);
     }
-  }, [editor, thread.id, accountId, messages]);
+  }, [thread.id, accountId, messages]);
 
   const activateMode = useCallback((newMode: ReplyMode) => {
-    if (!editor || !lastMessage) return;
+    if (!lastMessage) return;
     setMode(newMode);
     setAttachments([]);
     setHasAutoDraft(false);
@@ -126,15 +125,12 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     const quote = newMode === "forward"
       ? buildForwardQuote(lastMessage)
       : buildReplyQuote(lastMessage);
-    editor.commands.setContent(quote, { emitUpdate: false });
-    editor.commands.setTextSelection(0);
-    editor.commands.focus();
-
-    // Trigger auto-draft for reply/replyAll (not forward)
-    if (newMode === "reply" || newMode === "replyAll") {
-      loadAutoDraft(newMode);
-    }
-  }, [editor, lastMessage, activeAccount?.email, loadAutoDraft]);
+    // The editor is not mounted while collapsed, so defer quoting + auto-draft
+    // until TinyMCE reports ready (see <TinyMceEditor onReady> below).
+    pendingQuoteRef.current = quote;
+    pendingDraftModeRef.current =
+      newMode === "reply" || newMode === "replyAll" ? newMode : null;
+  }, [lastMessage, activeAccount?.email]);
 
   // Load default signature
   useEffect(() => {
@@ -163,12 +159,13 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   }, [mode]);
 
   const handleSend = useCallback(async () => {
-    if (!activeAccount || !editor || sending) return;
+    const ed = editorRef.current;
+    if (!activeAccount || !ed || sending) return;
     if (to.length === 0) return;
 
     setSending(true);
     try {
-      let html = editor.getHTML();
+      let html = ed.getContent();
       if (signatureHtml) {
         html += `<div style="margin-top:16px;border-top:1px solid #e5e5e5;padding-top:12px">${signatureHtml}</div>`;
       }
@@ -214,7 +211,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       setUndoSendTimer(timer);
 
       // Reset state
-      editor.commands.setContent("");
+      ed.setContent("", false);
       setAttachments([]);
       setMode(null);
       onSent();
@@ -223,11 +220,12 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     } finally {
       setSending(false);
     }
-  }, [activeAccount, editor, sending, to, cc, subject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent, attachments]);
+  }, [activeAccount, sending, to, cc, subject, signatureHtml, lastMessage, thread.id, accountId, mode, onSent, attachments]);
 
   const handleExpandToComposer = useCallback(() => {
-    if (!editor || !lastMessage) return;
-    const bodyHtml = editor.getHTML();
+    const ed = editorRef.current;
+    if (!ed || !lastMessage) return;
+    const bodyHtml = ed.getContent();
 
     openComposer({
       mode: mode === "forward" ? "forward" : mode === "replyAll" ? "replyAll" : "reply",
@@ -240,32 +238,34 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     });
 
     // Reset inline state
-    editor.commands.setContent("");
+    ed.setContent("", false);
     setMode(null);
-  }, [editor, lastMessage, to, cc, subject, mode, thread.id, openComposer]);
+  }, [lastMessage, to, cc, subject, mode, thread.id, openComposer]);
 
   const handleRegenerateDraft = useCallback(async () => {
-    if (!editor || !mode || mode === "forward") return;
+    const ed = editorRef.current;
+    if (!ed || !mode || mode === "forward") return;
     autoDraftAbortRef.current = false;
     setAutoDraftLoading(true);
     try {
       const draft = await regenerateAutoDraft(thread.id, accountId, messages, mode);
       if (autoDraftAbortRef.current || !draft) return;
-      editor.commands.setContent(draft);
+      ed.setContent(draft);
       setHasAutoDraft(true);
     } catch (err) {
       console.warn("Auto-draft regeneration failed:", err);
     } finally {
       setAutoDraftLoading(false);
     }
-  }, [editor, mode, thread.id, accountId, messages]);
+  }, [mode, thread.id, accountId, messages]);
 
   const handleClearDraft = useCallback(() => {
-    if (!editor) return;
-    editor.commands.setContent("");
+    const ed = editorRef.current;
+    if (!ed) return;
+    ed.setContent("", false);
     setHasAutoDraft(false);
-    editor.commands.focus();
-  }, [editor]);
+    ed.focus();
+  }, []);
 
   const handleInsertAttachment = useCallback((file: File) => {
     const reader = new FileReader();
@@ -283,18 +283,6 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     };
     reader.readAsDataURL(file);
   }, []);
-
-  // Abort auto-draft on user typing
-  useEffect(() => {
-    if (!editor) return;
-    const onUpdate = () => {
-      if (autoDraftLoading) {
-        autoDraftAbortRef.current = true;
-      }
-    };
-    editor.on("update", onUpdate);
-    return () => { editor.off("update", onUpdate); };
-  }, [editor, autoDraftLoading]);
 
   // Cleanup focus timer on unmount
   useEffect(() => {
@@ -314,7 +302,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        editor?.commands.setContent("");
+        editorRef.current?.setContent("", false);
         setAttachments([]);
         setMode(null);
         setHasAutoDraft(false);
@@ -323,7 +311,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [mode, handleSend, editor]);
+  }, [mode, handleSend]);
 
   if (!lastMessage) return null;
 
@@ -361,66 +349,77 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
   }
 
   // Expanded state — editor visible
-  const modeLabel = mode === "reply" ? "Reply" : mode === "replyAll" ? "Reply All" : "Forward";
 
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 z-10 bg-white flex flex-col overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary border-b border-border-secondary shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {(["reply", "replyAll", "forward"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-2 py-1 text-[0.6875rem] rounded transition-colors ${
-                  mode === m
-                    ? "bg-accent/10 text-accent font-medium"
-                    : "text-text-tertiary hover:text-text-primary"
-                }`}
-              >
-                {m === "reply" ? "Reply" : m === "replyAll" ? "Reply All" : "Forward"}
-              </button>
-            ))}
+      {/* Header row: send/cancel rail on the left, recipients+subject on the right */}
+      <div className="relative flex shrink-0">
+        <div className="w-16 absolute inset-y-0 left-0 border-r border-border-secondary bg-bg-secondary flex flex-col items-center gap-2 py-2 px-1">
+          <button
+            onClick={handleSend}
+            disabled={sending || to.length === 0}
+            className="w-full flex flex-col items-center justify-center gap-1 py-2 rounded-md text-xs font-medium text-white bg-accent hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send size={16} />
+            <span>发送</span>
+          </button>
+          <button
+            onClick={() => {
+              setMode(null);
+              setAttachments([]);
+            }}
+            className="w-full py-1 text-xs text-text-tertiary hover:text-text-primary rounded hover:bg-bg-hover transition-colors"
+          >
+            取消
+          </button>
+        </div>
+
+        <div className="flex-1 min-w-0 pl-16">
+          {/* Recipients */}
+          <div className="px-3 py-2 border-b border-border-secondary space-y-1.5 bg-bg-primary">
+            <EmailField label="收件人" values={to} onChange={setTo} placeholder="recipient@example.com" />
+            <EmailField label="抄送" values={cc} onChange={setCc} placeholder="cc@example.com" />
+          </div>
+
+          {/* Original subject, editable */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-secondary bg-bg-primary">
+            <span className="text-xs text-text-tertiary w-12 shrink-0">主题</span>
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="flex-1 bg-transparent text-sm text-text-primary outline-none"
+              placeholder="主题"
+            />
           </div>
         </div>
-        <button
-          onClick={() => {
-            setMode(null);
-            setAttachments([]);
-          }}
-          className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-
-      {/* Recipients + subject */}
-      <div className="px-3 py-2 border-b border-border-secondary space-y-1.5 bg-bg-primary shrink-0">
-        <EmailField label="To" values={to} onChange={setTo} placeholder="recipient@example.com" />
-        <EmailField label="Cc" values={cc} onChange={setCc} placeholder="cc@example.com" />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-tertiary w-8 shrink-0">Subj</span>
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-text-primary outline-none"
-            placeholder="Subject"
-          />
-        </div>
-      </div>
-
-      {/* Formatting toolbar */}
-      <div className="shrink-0">
-        <EditorToolbar editor={editor} onInsertAttachment={handleInsertAttachment} />
       </div>
 
       {/* Editor */}
-      <div className="relative flex-1 min-h-[200px] overflow-y-auto">
-        <EditorContent editor={editor} className="h-full" />
+      <div className="relative flex-1 min-h-[200px] overflow-hidden">
+        <TinyMceEditor
+          fillContainer
+          placeholder="Write your reply..."
+          onInsertAttachment={handleInsertAttachment}
+          onReady={(api) => {
+            editorRef.current = api;
+            // Deferred first-mount fill: quote the original thread and focus.
+            if (pendingQuoteRef.current !== null) {
+              api.setContent(pendingQuoteRef.current, false);
+              api.raw()?.selection?.setCursorLocation?.(api.raw()?.getBody?.(), 0);
+              api.focus();
+              pendingQuoteRef.current = null;
+            }
+            // Deferred auto-draft for reply/replyAll (not forward).
+            const draftMode = pendingDraftModeRef.current;
+            if (draftMode) {
+              pendingDraftModeRef.current = null;
+              loadAutoDraft(draftMode);
+            }
+          }}
+        />
         {autoDraftLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/60 backdrop-blur-[1px]">
             <div className="flex items-center gap-2 text-xs text-text-secondary">
@@ -432,7 +431,7 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border-secondary bg-bg-secondary shrink-0">
+      <div className="flex items-center px-3 py-2 border-t border-border-secondary bg-bg-secondary shrink-0">
         <div className="flex items-center gap-1">
           <button
             onClick={handleExpandToComposer}
@@ -464,14 +463,6 @@ export function InlineReply({ thread, messages, accountId, noReply, onSent }: In
             </>
           )}
         </div>
-        <button
-          onClick={handleSend}
-          disabled={sending || to.length === 0}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-hover rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Send size={12} />
-          {modeLabel}
-        </button>
       </div>
     </div>
   );
@@ -511,7 +502,7 @@ function EmailField({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-text-tertiary w-8 shrink-0">{label}</span>
+      <span className="text-xs text-text-tertiary w-12 shrink-0">{label}</span>
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.2](https://github.com/YangLizhi/CloudMail/releases/tag/v0.5.2) (2026-08-27)
+
+### Features
+
+* Replace the hand-written rich-text toolbar with **TinyMCE 6** (MIT, locally bundled) across the composer, inline reply, signature and template editors. Adds full Word-style formatting (font/size/color/highlight, bold/italic/underline/strikethrough, paragraph & heading levels, bullet/numbered lists, alignment & indentation, editable tables with visible borders, images, links, special characters, clear formatting).
+* Inline reply layout matches Outlook: send/cancel rail on the left, recipients + editable original subject on the right, editor fills the remaining height; undo/redo moved to the toolbar's left; the reply/forward/archive action icons redesigned to be distinct from undo/redo.
+* New **storage location** setting (Settings → General → Storage): users can choose any directory (e.g. another disk) for the mail database. The app moves existing `cloudmail.db` (+ WAL/SHM) to the chosen location via a directory junction and releases the original drive space; includes automatic recovery if a prior move was interrupted.
+* Simplified-Chinese language pack for TinyMCE.
+
+### Bug Fixes
+
+* Fix cross-volume database migration (use copy+delete instead of rename) and raw-arg junction creation; storage migration no longer half-completes.
+* Fix seed-on-open for inline reply so Reply/Reply All/Forward expand correctly.
+
 ## [0.5.1](https://github.com/YangLizhi/CloudMail/releases/tag/v0.5.1) (2026-08-24)
 
 ### Rebrand

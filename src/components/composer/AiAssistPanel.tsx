@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import type { Editor } from "@tiptap/react";
 import { Wand2, Sparkles, ArrowDown, Briefcase } from "lucide-react";
 import { isAiAvailable } from "@/services/ai/providerManager";
 import {
@@ -9,9 +8,10 @@ import {
   type TransformType,
 } from "@/services/ai/aiService";
 import { useComposerStore } from "@/stores/composerStore";
+import type { RichTextEditorApi } from "./TinyMceEditor";
 
 interface AiAssistPanelProps {
-  editor: Editor | null;
+  editor: RichTextEditorApi | null;
   isReplyMode: boolean;
   threadMessages?: string[];
 }
@@ -33,8 +33,9 @@ export function AiAssistPanel({ editor, isReplyMode, threadMessages }: AiAssistP
 
   const applyToEditor = (html: string) => {
     if (!editor) return;
-    editor.chain().focus().setContent(html).run();
-    setBodyHtml(editor.getHTML());
+    editor.setContent(html);
+    editor.focus();
+    setBodyHtml(editor.getContent());
   };
 
   const handleCompose = async () => {
@@ -69,7 +70,7 @@ export function AiAssistPanel({ editor, isReplyMode, threadMessages }: AiAssistP
 
   const handleTransform = async (type: TransformType) => {
     if (!editor || loading) return;
-    const html = editor.getHTML();
+    const html = editor.getContent();
     if (!html || html === "<p></p>") return;
     setLoading(true);
     setError(null);

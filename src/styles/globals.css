@@ -527,3 +527,13 @@ body {
 .markdown-body a {
   word-break: break-all;
 }
+
+/* Keep the mail composer controls aligned with the requested 14px UI scale. */
+.mail-editor .tox,
+.mail-editor .tox .tox-toolbar,
+.mail-editor .tox .tox-toolbar__group,
+.mail-editor .tox .tox-tbtn,
+.mail-editor .tox .tox-tbtn__select-label,
+.mail-editor .tox .tox-tbtn__select-chevron {
+  font-size: 14px;
+}

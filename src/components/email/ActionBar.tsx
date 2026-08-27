@@ -10,7 +10,7 @@ import { snoozeThread } from "@/services/snooze/snoozeManager";
 import { getGmailClient } from "@/services/gmail/tokenManager";
 import { SnoozeDialog } from "./SnoozeDialog";
 import { FollowUpDialog } from "./FollowUpDialog";
-import { Archive, Trash2, MailOpen, Mail, Star, Clock, Ban, Pin, MailMinus, BellRing, VolumeX, Reply, ReplyAll, Forward, FolderInput, Printer, Download, ExternalLink, PanelRightClose, PanelRightOpen, ListTodo, Sparkles } from "lucide-react";
+import { Archive, Trash2, MailOpen, Mail, Star, Clock, Ban, Pin, MailMinus, BellRing, VolumeX, MessageSquare, Users, Share, FolderInput, Printer, Download, ExternalLink, PanelRightClose, PanelRightOpen, ListTodo, Sparkles } from "lucide-react";
 import type { DbMessage } from "@/services/db/messages";
 import { insertFollowUpReminder, getFollowUpForThread, cancelFollowUpForThread } from "@/services/db/followUpReminders";
 import { Button } from "@/components/ui/Button";
@@ -212,7 +212,7 @@ export function ActionBar({ thread, messages, noReply, defaultReplyMode = "reply
             <Button
               variant="secondary"
               iconOnly
-              icon={defaultReplyMode === "replyAll" ? <ReplyAll size={15} /> : <Reply size={15} />}
+              icon={defaultReplyMode === "replyAll" ? <Users size={15} /> : <MessageSquare size={15} />}
               onClick={defaultReplyMode === "replyAll" ? onReplyAll : onReply}
               disabled={noReply}
               title={noReply ? "This sender does not accept replies" : defaultReplyMode === "replyAll" ? "Reply All (r)" : "Reply (r)"}
@@ -221,7 +221,7 @@ export function ActionBar({ thread, messages, noReply, defaultReplyMode = "reply
             <Button
               variant="secondary"
               iconOnly
-              icon={defaultReplyMode === "replyAll" ? <Reply size={15} /> : <ReplyAll size={15} />}
+              icon={defaultReplyMode === "replyAll" ? <MessageSquare size={15} /> : <Users size={15} />}
               onClick={defaultReplyMode === "replyAll" ? onReply : onReplyAll}
               disabled={noReply}
               title={noReply ? "This sender does not accept replies" : defaultReplyMode === "replyAll" ? "Reply (a)" : "Reply All (a)"}
@@ -230,7 +230,7 @@ export function ActionBar({ thread, messages, noReply, defaultReplyMode = "reply
             <Button
               variant="secondary"
               iconOnly
-              icon={<Forward size={15} />}
+              icon={<Share size={15} />}
               onClick={onForward}
               title="Forward (f)"
             />

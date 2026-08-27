@@ -10,6 +10,7 @@ mod commands;
 mod imap;
 mod oauth;
 mod smtp;
+mod storage;
 
 #[tauri::command]
 fn close_splashscreen(app: tauri::AppHandle) {
@@ -198,6 +199,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
+            storage::set_db_location,
             oauth::start_oauth_server,
             oauth::oauth_exchange_token,
             oauth::oauth_refresh_token,

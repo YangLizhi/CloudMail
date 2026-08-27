@@ -180,6 +180,8 @@ export function SettingsPage() {
   const [cacheMaxMb, setCacheMaxMb] = useState("500");
   const [cacheSizeMb, setCacheSizeMb] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
+  const [dbLocation, setDbLocationLabel] = useState<string>("default");
+  const [migratingDb, setMigratingDb] = useState(false);
   const [reauthStatus, setReauthStatus] = useState<Record<string, "idle" | "authorizing" | "done" | "error">>({});
   const [resyncStatus, setResyncStatus] = useState<Record<string, "idle" | "syncing" | "done" | "error">>({});
   const [autoArchiveCategories, setAutoArchiveCategories] = useState<Set<string>>(() => new Set());
@@ -410,6 +412,14 @@ export function SettingsPage() {
         setCacheSizeMb(Math.round(size / (1024 * 1024) * 10) / 10);
       } catch {
         // cache manager may not be available
+      }
+
+      // Load storage location (mail database directory).
+      try {
+        const { getDbLocation } = await import("@/services/db/storageLocation");
+        setDbLocationLabel(await getDbLocation());
+      } catch {
+        setDbLocationLabel("default");
       }
 
       // Load probed model list for the current provider
@@ -770,6 +780,44 @@ export function SettingsPage() {
                   </Section>
 
                   <Section title="Storage">
+                    <SettingRow label="存储位置">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-text-tertiary break-all flex-1">
+                          {dbLocation === "default" ? "默认（系统数据目录）" : dbLocation}
+                        </span>
+                        <Button
+                          variant="secondary"
+                          onClick={async () => {
+                            const { open } = await import("@tauri-apps/plugin-dialog");
+                            const picked = await open({ directory: true });
+                            const dir = typeof picked === "string" ? picked : null;
+                            if (!dir) return;
+                            setMigratingDb(true);
+                            try {
+                              const { setDbLocation } = await import("@/services/db/storageLocation");
+                              await setDbLocation(dir);
+                              setDbLocationLabel(dir);
+                            } catch (err) {
+                              console.error("Failed to move DB:", err);
+                              alert(
+                                `迁移失败：${
+                                  err instanceof Error ? err.message : String(err)
+                                }`,
+                              );
+                            } finally {
+                              setMigratingDb(false);
+                            }
+                          }}
+                          disabled={migratingDb}
+                          className="bg-bg-tertiary text-text-primary border border-border-primary shrink-0"
+                        >
+                          {migratingDb ? "迁移中..." : "选择目录"}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        选择后会迁移邮件数据库到新目录，并释放原存储空间。
+                      </p>
+                    </SettingRow>
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-sm text-text-secondary">Attachment cache</span>

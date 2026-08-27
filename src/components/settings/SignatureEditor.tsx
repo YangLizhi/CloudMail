@@ -1,11 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Trash2, Pencil, Code } from "lucide-react";
 import { TextField } from "@/components/ui/TextField";
-import { EditorToolbar } from "@/components/composer/EditorToolbar";
+import { TinyMceEditor, type RichTextEditorApi } from "@/components/composer/TinyMceEditor";
 import { useAccountStore } from "@/stores/accountStore";
 import {
   getSignaturesForAccount,
@@ -24,20 +20,8 @@ export function SignatureEditor() {
   const [showForm, setShowForm] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
   const [rawHtml, setRawHtml] = useState("");
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false } }),
-      Image.configure({ inline: true, allowBase64: true }),
-      Placeholder.configure({ placeholder: "Write your signature..." }),
-    ],
-    content: "",
-    editorProps: {
-      attributes: {
-        class: "prose prose-sm max-w-none px-3 py-2 min-h-[80px] focus:outline-none text-text-primary text-xs",
-      },
-    },
-  });
+  const editorRef = useRef<RichTextEditorApi | null>(null);
+  const pendingInitRef = useRef<string | null>(null);
 
   const loadSignatures = useCallback(async () => {
     if (!activeAccountId) return;
@@ -57,25 +41,25 @@ export function SignatureEditor() {
     setShowForm(false);
     setIsHtmlMode(false);
     setRawHtml("");
-    editor?.commands.setContent("");
-  }, [editor]);
+    editorRef.current?.setContent("", false);
+  }, []);
 
   const toggleHtmlMode = useCallback(() => {
-    if (!editor) return;
+    if (!editorRef.current) return;
     if (isHtmlMode) {
       // HTML → WYSIWYG: push rawHtml into editor
-      editor.commands.setContent(rawHtml);
+      pendingInitRef.current = rawHtml;
     } else {
       // WYSIWYG → HTML: capture editor content
-      setRawHtml(editor.getHTML());
+      setRawHtml(editorRef.current.getContent());
     }
     setIsHtmlMode(!isHtmlMode);
-  }, [editor, isHtmlMode, rawHtml]);
+  }, [isHtmlMode, rawHtml]);
 
   const handleSave = useCallback(async () => {
-    if (!activeAccountId || !editor || !name.trim()) return;
+    if (!activeAccountId || !name.trim()) return;
 
-    const bodyHtml = isHtmlMode ? rawHtml : editor.getHTML();
+    const bodyHtml = isHtmlMode ? rawHtml : editorRef.current?.getContent() ?? "";
 
     if (editingId) {
       await updateSignature(editingId, { name: name.trim(), bodyHtml, isDefault });
@@ -90,15 +74,16 @@ export function SignatureEditor() {
 
     resetForm();
     await loadSignatures();
-  }, [activeAccountId, editor, name, isDefault, editingId, isHtmlMode, rawHtml, resetForm, loadSignatures]);
+  }, [activeAccountId, name, isDefault, editingId, isHtmlMode, rawHtml, resetForm, loadSignatures]);
 
   const handleEdit = useCallback((sig: DbSignature) => {
     setEditingId(sig.id);
     setName(sig.name);
     setIsDefault(sig.is_default === 1);
     setShowForm(true);
-    editor?.commands.setContent(sig.body_html);
-  }, [editor]);
+    pendingInitRef.current = sig.body_html ?? "";
+    editorRef.current?.setContent(sig.body_html ?? "", false);
+  }, []);
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteSignature(id);
@@ -150,10 +135,8 @@ export function SignatureEditor() {
           />
           <div className="border border-border-primary rounded overflow-hidden bg-bg-tertiary">
             <div className="flex items-center justify-between">
-              {isHtmlMode ? (
+              {isHtmlMode && (
                 <span className="px-2 py-1 text-xs text-text-secondary">HTML source</span>
-              ) : (
-                <EditorToolbar editor={editor} />
               )}
               <button
                 type="button"
@@ -172,7 +155,17 @@ export function SignatureEditor() {
                 spellCheck={false}
               />
             ) : (
-              <EditorContent editor={editor} />
+              <TinyMceEditor
+                height={160}
+                placeholder="Write your signature..."
+                onReady={(api) => {
+                  editorRef.current = api;
+                  if (pendingInitRef.current !== null) {
+                    api.setContent(pendingInitRef.current, false);
+                    pendingInitRef.current = null;
+                  }
+                }}
+              />
             )}
           </div>
           <div className="flex items-center gap-2">

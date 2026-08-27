@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CSSTransition } from "react-transition-group";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { Clock, Maximize2, Minimize2, ExternalLink } from "lucide-react";
+import { Clock, Maximize2, Minimize2, ExternalLink, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { AddressInput } from "./AddressInput";
-import { EditorToolbar } from "./EditorToolbar";
-import { buildRichTextExtensions } from "./richText";
+import { TinyMceEditor, type RichTextEditorApi } from "./TinyMceEditor";
 import { AiAssistPanel } from "./AiAssistPanel";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { ScheduleSendDialog } from "./ScheduleSendDialog";
@@ -25,9 +23,7 @@ import { getDefaultSignature } from "@/services/db/signatures";
 import { getAliasesForAccount, mapDbAlias, type SendAsAlias } from "@/services/db/sendAsAliases";
 import { resolveFromAddress } from "@/utils/resolveFromAddress";
 import { startAutoSave, stopAutoSave } from "@/services/composer/draftAutoSave";
-import { getTemplatesForAccount, type DbTemplate } from "@/services/db/templates";
 import { readFileAsBase64 } from "@/utils/fileUtils";
-import { interpolateVariables } from "@/utils/templateVariables";
 import { sanitizeHtml } from "@/utils/sanitize";
 
 export function Composer() {
@@ -44,7 +40,8 @@ export function Composer() {
   const signatureHtml = useComposerStore((s) => s.signatureHtml);
   const isSaving = useComposerStore((s) => s.isSaving);
   const lastSavedAt = useComposerStore((s) => s.lastSavedAt);
-  // Note: bodyHtml intentionally NOT subscribed — TipTap manages its own editor state.
+  // Note: bodyHtml intentionally NOT subscribed — TinyMCE manages its own editor state
+  // and we write updates into the store via onEditorChange.
   // Subscribing would cause full re-renders on every keystroke.
   const closeComposer = useComposerStore((s) => s.closeComposer);
   const setTo = useComposerStore((s) => s.setTo);
@@ -63,83 +60,10 @@ export function Composer() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showAiAssist, setShowAiAssist] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [editorApi, setEditorApi] = useState<RichTextEditorApi | null>(null);
   const [aliases, setAliases] = useState<SendAsAlias[]>([]);
-  const templateShortcutsRef = useRef<DbTemplate[]>([]);
   const dragCounterRef = useRef(0);
   const overlayRef = useRef<HTMLDivElement | null>(null);
-
-  const editor = useEditor({
-    extensions: buildRichTextExtensions("Write your message..."),
-    content: useComposerStore.getState().bodyHtml,
-    onUpdate: ({ editor: ed }) => {
-      useComposerStore.getState().setBodyHtml(ed.getHTML());
-
-      // Check for template shortcut triggers
-      const templates = templateShortcutsRef.current;
-      if (templates.length === 0) return;
-
-      const text = ed.state.doc.textContent;
-      for (const tmpl of templates) {
-        if (!tmpl.shortcut) continue;
-        if (text.endsWith(tmpl.shortcut)) {
-          // Delete the shortcut text and insert template body with variables resolved
-          const { from } = ed.state.selection;
-          const deleteFrom = from - tmpl.shortcut.length;
-          if (deleteFrom >= 0) {
-            const state = useComposerStore.getState();
-            const account = useAccountStore.getState().accounts.find(
-              (a) => a.id === useAccountStore.getState().activeAccountId,
-            );
-            interpolateVariables(tmpl.body_html, {
-              recipientEmail: state.to[0],
-              senderEmail: account?.email,
-              senderName: account?.displayName ?? undefined,
-              subject: state.subject || undefined,
-            }).then((resolved) => {
-              ed.chain()
-                .deleteRange({ from: deleteFrom, to: from })
-                .insertContent(resolved)
-                .run();
-            });
-            if (tmpl.subject && !state.subject) {
-              setSubject(tmpl.subject);
-            }
-          }
-          break;
-        }
-      }
-    },
-    editorProps: {
-      attributes: {
-        class:
-          "prose prose-sm max-w-none px-4 py-3 min-h-[200px] focus:outline-none text-text-primary",
-      },
-      handleDrop: (_view, event) => {
-        // Prevent TipTap from handling file drops as inline content.
-        // Returning true stops TipTap's Image extension from intercepting the drop,
-        // allowing the event to bubble up to the composer's onDrop for attachment handling.
-        if (event.dataTransfer?.files?.length) {
-          return true;
-        }
-        return false;
-      },
-    },
-  });
-
-  // Seed the TipTap editor with the composer store's bodyHtml (e.g. the
-  // reply/forward quote) whenever it opens. The editor is created once while
-  // the composer stays mounted, so bodyHtml is intentionally not subscribed.
-  const normalizeEmpty = (s: string) => s.replace(/<p>\s*<\/p>\s*/g, "").trim();
-  useEffect(() => {
-    if (!isOpen || !editor) return;
-    const storeBody = useComposerStore.getState().bodyHtml || "";
-    const editorBody = editor.getHTML() || "";
-    // Only reseed when they diverge; emitUpdate=false avoids a save loop and
-    // the editor body is kept in sync via onUpdate while the user types.
-    if (normalizeEmpty(editorBody) !== normalizeEmpty(storeBody)) {
-      editor.commands.setContent(storeBody, { emitUpdate: false });
-    }
-  }, [isOpen, editor]);
 
   // Load signature, aliases, and templates in parallel when composer opens
   useEffect(() => {
@@ -149,8 +73,7 @@ export function Composer() {
     Promise.all([
       getDefaultSignature(activeAccountId),
       getAliasesForAccount(activeAccountId),
-      getTemplatesForAccount(activeAccountId),
-    ]).then(([sig, dbAliases, templates]) => {
+    ]).then(([sig, dbAliases]) => {
       if (cancelled) return;
       const store = useComposerStore.getState();
 
@@ -173,8 +96,6 @@ export function Composer() {
         }
       }
 
-      // Templates
-      templateShortcutsRef.current = templates.filter((t) => t.shortcut);
     });
 
     return () => { cancelled = true; };
@@ -228,11 +149,25 @@ export function Composer() {
     }
   }, [addAttachment]);
 
+  // Keep the editor body in sync with the store when the composer opens. The
+  // editor is freshly mounted while open, but this guards against a stale
+  // CSSTransition instance (e.g. fast open/close) that would otherwise keep the
+  // previous reply/forward quote on screen.
+  useEffect(() => {
+    if (!isOpen || !editorApi) return;
+    const storeBody = useComposerStore.getState().bodyHtml || "";
+    const cur = editorApi.getContent() || "";
+    const normalize = (s: string) => s.replace(/<p>\s*<\/p>\s*/g, "").trim();
+    if (normalize(cur) !== normalize(storeBody)) {
+      editorApi.setContent(storeBody, false);
+    }
+  }, [isOpen, editorApi]);
+
   const getFullHtml = useCallback(() => {
-    const editorHtml = editor?.getHTML() ?? "";
+    const editorHtml = editorApi?.getContent() ?? "";
     if (!signatureHtml) return editorHtml;
     return `${editorHtml}<div style="margin-top:16px;border-top:1px solid #e5e5e5;padding-top:12px">${sanitizeHtml(signatureHtml)}</div>`;
-  }, [editor, signatureHtml]);
+  }, [editorApi, signatureHtml]);
 
   const handleSend = useCallback(async () => {
     if (!activeAccountId || !activeAccount || sendingRef.current) return;
@@ -387,7 +322,7 @@ export function Composer() {
       if (state.draftId) params.set("draftId", state.draftId);
       if (state.fromEmail) params.set("fromEmail", state.fromEmail);
       // Encode body as base64 to safely pass HTML
-      const bodyHtml = editor?.getHTML() ?? "";
+      const bodyHtml = editorApi?.getContent() ?? "";
       if (bodyHtml) params.set("body", btoa(unescape(encodeURIComponent(bodyHtml))));
 
       const windowLabel = `compose-${Date.now()}`;
@@ -410,7 +345,7 @@ export function Composer() {
     } catch (err) {
       console.error("Failed to pop out composer:", err);
     }
-  }, [editor, closeComposer]);
+  }, [editorApi, closeComposer]);
 
   const isFullpage = viewMode === "fullpage";
 
@@ -519,27 +454,39 @@ export function Composer() {
               placeholder="Subject"
               className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
             />
+            <button
+              type="button"
+              onClick={() => setShowAiAssist(!showAiAssist)}
+              title="AI Assistant"
+              className={`ml-2 p-1 rounded transition-colors ${
+                showAiAssist
+                  ? "bg-accent/10 text-accent"
+                  : "text-text-tertiary hover:text-text-primary"
+              }`}
+            >
+              <Sparkles size={14} />
+            </button>
           </div>
         </div>
-
-        {/* Editor toolbar */}
-        <EditorToolbar
-          editor={editor}
-          onToggleAiAssist={() => setShowAiAssist(!showAiAssist)}
-          aiAssistOpen={showAiAssist}
-        />
 
         {/* AI Assist Panel */}
         {showAiAssist && (
           <AiAssistPanel
-            editor={editor}
+            editor={editorApi}
             isReplyMode={mode === "reply" || mode === "replyAll"}
           />
         )}
 
         {/* Editor */}
-        <div className="flex-1 overflow-y-auto">
-          <EditorContent editor={editor} />
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+          <TinyMceEditor
+            initialValue={useComposerStore.getState().bodyHtml}
+            height={360}
+            onEditorChange={(html) => {
+              useComposerStore.getState().setBodyHtml(html);
+            }}
+            onReady={setEditorApi}
+          />
           {signatureHtml && (
             <div
               className="px-4 py-2 border-t border-border-secondary text-xs text-text-tertiary"
@@ -565,7 +512,7 @@ export function Composer() {
               </span>
             )}
             <SignatureSelector />
-            <TemplatePicker editor={editor} />
+            <TemplatePicker editor={editorApi} />
           </div>
           <div className="flex items-center gap-2">
             <Button

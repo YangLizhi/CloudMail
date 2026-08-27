@@ -9,12 +9,11 @@ import { useContextMenuStore } from "@/stores/contextMenuStore";
 import { markThreadRead } from "@/services/emailActions";
 import { getSetting } from "@/services/db/settings";
 import { getAllowlistedSenders } from "@/services/db/imageAllowlist";
-import { VolumeX } from "lucide-react";
 import { escapeHtml, sanitizeHtml } from "@/utils/sanitize";
 import { isNoReplyAddress } from "@/utils/noReply";
 import { ThreadSummary } from "./ThreadSummary";
 import { SmartReplySuggestions } from "./SmartReplySuggestions";
-import { InlineReply } from "./InlineReply";
+import { InlineReply, type ReplyMode } from "./InlineReply";
 import { ContactSidebar } from "./ContactSidebar";
 import { TaskSidebar } from "@/components/tasks/TaskSidebar";
 import { AiTaskExtractDialog } from "@/components/tasks/AiTaskExtractDialog";
@@ -239,6 +238,12 @@ export function ThreadView({ thread }: ThreadViewProps) {
     messageId: string;
     accountId: string;
   } | null>(null);
+  const [replyMode, setReplyMode] = useState<ReplyMode | null>(null);
+
+  // When switching to another thread, close any open inline reply.
+  useEffect(() => {
+    setReplyMode(null);
+  }, [thread.id]);
 
   // Listen for "View Source" event from context menu
   useEffect(() => {
@@ -364,21 +369,6 @@ export function ThreadView({ thread }: ThreadViewProps) {
           onToggleAiChat={() => useUIStore.getState().toggleAiChat()}
         />
 
-        {/* Thread subject */}
-        <div className="px-6 py-3 border-b border-border-primary">
-          <h1 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            {thread.subject ?? "(No subject)"}
-            {thread.isMuted && (
-              <span className="text-warning shrink-0" title="Muted">
-                <VolumeX size={16} />
-              </span>
-            )}
-          </h1>
-          <div className="text-xs text-text-tertiary mt-1">
-            {messages.length} message{messages.length !== 1 ? "s" : ""} in this thread
-          </div>
-        </div>
-
         {/* AI Summary */}
         {activeAccountId && (
           <ThreadSummary
@@ -390,24 +380,26 @@ export function ThreadView({ thread }: ThreadViewProps) {
 
         {/* Messages (scrollable) */}
         <div className="flex-1 overflow-y-auto relative">
-          <ErrorBoundary name="MessageList">
-            {messages.map((msg, i) => (
-              <MessageItem
-                key={msg.id}
-                ref={(el) => { messageRefs.current[i] = el; }}
-                message={msg}
-                isLast={i === messages.length - 1}
-                focused={i === focusedMsgIdx}
-                blockImages={blockImages}
-                senderAllowlisted={msg.from_address ? allowlistedSenders.has(msg.from_address) : false}
-                isSpam={thread.labelIds.includes("SPAM")}
-                onContextMenu={(e) => handleMessageContextMenu(e, msg)}
-              />
-            ))}
-          </ErrorBoundary>
+          {messages.length > 0 && !replyMode && (
+            <ErrorBoundary name="MessageList">
+              {messages.map((msg, i) => (
+                <MessageItem
+                  key={msg.id}
+                  ref={(el) => { messageRefs.current[i] = el; }}
+                  message={msg}
+                  isLast={i === messages.length - 1}
+                  focused={i === focusedMsgIdx}
+                  blockImages={blockImages}
+                  senderAllowlisted={msg.from_address ? allowlistedSenders.has(msg.from_address) : false}
+                  isSpam={thread.labelIds.includes("SPAM")}
+                  onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+                />
+              ))}
+            </ErrorBoundary>
+          )}
 
           {/* Smart Reply Suggestions — shown right below the last message */}
-          {activeAccountId && messages.length > 0 && (
+          {activeAccountId && messages.length > 0 && !replyMode && (
             <SmartReplySuggestions
               threadId={thread.id}
               accountId={activeAccountId}
@@ -423,6 +415,7 @@ export function ThreadView({ thread }: ThreadViewProps) {
               messages={messages}
               accountId={activeAccountId}
               noReply={noReply}
+              onModeChange={setReplyMode}
               onSent={() => {
                 // Reload messages after sending
                 getMessagesForThread(activeAccountId, thread.id)

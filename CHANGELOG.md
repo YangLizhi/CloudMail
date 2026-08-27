@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.2](https://github.com/YangLizhi/CloudMail/compare/velo-v0.5.1...velo-v0.5.2) (2026-08-27)
+
+
+### Features
+
+* improve email reading area (white bg, typography, tables/images) ([8a47724](https://github.com/YangLizhi/CloudMail/commit/8a47724b1e2cd6238bc57221d60b03b634dfaa62))
+* inline reply sits below the message and gains formatting toolbar ([ee3f9f2](https://github.com/YangLizhi/CloudMail/commit/ee3f9f2834128cc43c7243124349843559d3f529))
+* reply expands the whole reading area (Outlook-style), cursor at top ([95aaced](https://github.com/YangLizhi/CloudMail/commit/95aaced1be3b33308fb166708f5cfe7291ee6217))
+* reply/reply-all/forward inline in reading pane (Outlook-style) ([2d20866](https://github.com/YangLizhi/CloudMail/commit/2d20866977020b7075549c3f9da9628e7ceeb6bd))
+* rich Word-like editing toolbar (font/size/color/highlight/align/indent/table/attachment) ([844b0c1](https://github.com/YangLizhi/CloudMail/commit/844b0c1d73e083ac777ae5f9989076484ac94a52))
+* TinyMCE 6 rich-text editor + customizable storage location (0.5.2) ([aabf400](https://github.com/YangLizhi/CloudMail/commit/aabf400a2882fff6439a8158dd799fbf7afa1087))
+
+
+### Bug Fixes
+
+* inline email images and attachment open/preview ([17d7965](https://github.com/YangLizhi/CloudMail/commit/17d79650170ad828875484e37e71bab86d6b4e68))
+* reactive editor toolbar + single-click color swatches ([a71df3d](https://github.com/YangLizhi/CloudMail/commit/a71df3d45ada53d40477bbd27becfb689cd957d8))
+* resolve IMAP attachment fetch (UID FLAGS + Message-ID search) and allow blob previews ([99a5a9e](https://github.com/YangLizhi/CloudMail/commit/99a5a9e2c4bfb33b647162b3db39fbf727b4f0fe))
+* seed reply/forward quote into composer editor on open ([dbf8412](https://github.com/YangLizhi/CloudMail/commit/dbf84125e774f37078a1d00decb90c8e93f4010f))
+* use local attachment cache for preview/download/open and inline images ([5445958](https://github.com/YangLizhi/CloudMail/commit/54459583bb3d0c1409071eede2f6d8838380c102))
+* use opener:allow-open-path permission with appdata scope ([34f52b1](https://github.com/YangLizhi/CloudMail/commit/34f52b182ecad1ff18d136f64a75c263da21e21f))
+
 ## [0.5.2](https://github.com/YangLizhi/CloudMail/releases/tag/v0.5.2) (2026-08-27)
 
 ### Features

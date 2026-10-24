@@ -53,7 +53,7 @@
     "react-markdown": "^10.1.0",
     "react-transition-group": "^4.4.5",
     "remark-gfm": "^4.0.1",
-    "tinymce": "^6.8.6",
+    "tinymce": "^8.8.2",
     "tsdav": "^2.1.8",
     "zustand": "^5.0.11"
   },
